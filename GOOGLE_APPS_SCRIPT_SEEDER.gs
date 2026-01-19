@@ -1,25 +1,78 @@
+
 // INSTRUKSI:
 // 1. Buat File Script baru di Google Apps Script Editor.
 // 2. Paste kode ini.
 // 3. Simpan, lalu Pilih fungsi "seedAllContent" di toolbar atas.
-// 4. Klik "Run". (Berikan izin jika diminta).
+// 4. Klik "Run".
 
 function seedAllContent() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // 1. DATA SOP (Standard Operating Procedure)
+  // 1. DATA SOP (SOP Updated with Subtitles/Keterangan)
   const sopData = [
-    ['sop_01', 'persiapan', true, 'Tujuan & Batasan Peran', 'Purpose & Role Limits', '', 'Tujuan: Meningkatkan pengetahuan pramuwisata terkait bumil. Pramuwisata BUKAN medis. Tugas: Skrining, edukasi, pantau. DILARANG diagnosa/obat.', 'Purpose: Increase guide knowledge re: pregnant guests. Guides are NOT medics. Duty: Screen, educate, monitor. NO diagnosis/meds.'],
-    ['sop_02', 'persiapan', true, 'Definisi Pramuwisata', 'Definition of Tour Guide', '', 'Pramuwisata memandu & berhubungan langsung dengan tamu. Memberikan bimbingan, petunjuk, dan perlindungan tambahan bagi wisatawan.', 'Guides lead & interact directly with guests. Provide guidance, direction, and extra protection for tourists.'],
-    ['sop_03', 'persiapan', true, 'Apakah Bumil Boleh Wisata?', 'Can Pregnant Women Tour?', '', 'YA. Wisata fisik bermanfaat. TAPI perhatikan usia kehamilan, kondisi ibu/janin, dan jenis aktivitas.', 'YES. Physical tourism is beneficial. BUT consider pregnancy age, condition, and activity type.'],
-    ['sop_04', 'persiapan', true, 'Aturan Usia Kehamilan', 'Pregnancy Age Rules', '', 'AMAN: 4-6 Bulan. HINDARI: 1-3 Bulan (Rentan Keguguran/Mual) dan 7-9 Bulan (Ketidaknyamanan/Sering Kencing).', 'SAFE: 4-6 Months. AVOID: 1-3 Months (Miscarriage Risk) and 7-9 Months (Discomfort/Freq Urination).'],
-    ['sop_05', 'kuliner', true, 'Aktivitas Dianjurkan', 'Recommended Activities', '', '1. Jalan santai di area rata. 2. Duduk menikmati pemandangan (teduh). 3. Kuliner matang & higienis.', '1. Relaxing walk on flat areas. 2. Sitting with view (shade). 3. Cooked & hygienic culinary.'],
-    ['sop_06', 'snorkeling', true, 'Aktivitas Terbatas', 'Limited Activities', '', 'Renang ringan / Surface Snorkeling. SYARAT: Skrining Aman, Laut Tenang, Ada Pelampung, Ada Pemandu. STOP jika sesak/pusing.', 'Light swim / Surface Snorkeling. CONDITION: Safe Screening, Calm Sea, Life Jacket, Guide present. STOP if dizzy.'],
-    ['sop_07', 'boat', false, 'Aktivitas DILARANG', 'Prohibited Activities', '', '1. Scuba Diving (Bahaya dekompresi). 2. Jet Ski/Banana Boat (Benturan). 3. Renang saat ombak besar.', '1. Scuba Diving (Decompression risk). 2. Jet Ski/Banana Boat (Impact). 3. Swimming in rough waves.']
+    [
+      'sop_01', 'persiapan', true, 
+      'Peran & Batasan', 'Role & Limits', 
+      'Tanggung Jawab Guide', 'Guide Responsibility',
+      '', 
+      'Pramuwisata BUKAN tenaga medis. Tugas utama: Skrining, edukasi keselamatan, dan pemantauan kondisi tamu.', 
+      'Guides are NOT medical personnel. Main duty: Screening, safety education, and monitoring guest condition.'
+    ],
+    [
+      'sop_02', 'persiapan', true, 
+      'Aturan Trimester', 'Trimester Rules',
+      'Waktu Aman Wisata', 'Safe Travel Time',
+      '', 
+      'Usia kehamilan paling aman adalah 14-28 Minggu (Trimester 2). Hindari wisata berat di Trimester 1 (risiko mual/keguguran) dan Trimester 3 (risiko prematur).', 
+      'Safest pregnancy age is 14-28 Weeks (2nd Trimester). Avoid heavy tours in 1st Trimester (nausea/miscarriage risk) and 3rd Trimester (premature risk).'
+    ],
+    [
+      'sop_03', 'boat', false, 
+      'Larangan Keras', 'Strict Prohibition',
+      'Aktivitas Berisiko Tinggi', 'High Risk Activities',
+      '', 
+      'Dilarang melakukan Scuba Diving, menaiki Speedboat kecepatan tinggi (bouncing), dan berenang saat arus kuat.', 
+      'No Scuba Diving, high-speed Speedboat rides (bouncing), and swimming during strong currents.'
+    ]
   ];
   updateSheet(ss, 'SOP_DATA', sopData);
 
-  // 2. DATA QUESTIONS (Screening Logic)
+  // 2. DATA TIPS (10 ICON CATEGORIES)
+  // Icon keys: 'hydration', 'sun', 'food', 'medicine', 'companion', 'rest', 'clothing', 'float', 'seat', 'emergency'
+  const tipsData = [
+    ['t1', 'Hidrasi', 'Hydration', 'Minum air minimal 2 liter per hari untuk mencegah dehidrasi.', 'Drink at least 2 liters of water daily to prevent dehydration.', 'hydration'],
+    ['t2', 'Perlindungan Matahari', 'Sun Protection', 'Gunakan topi lebar dan tabir surya SPF 30+.', 'Use wide hats and SPF 30+ sunscreen.', 'sun'],
+    ['t3', 'Makanan Higienis', 'Hygienic Food', 'Pastikan makanan matang sempurna. Hindari makanan mentah/salad.', 'Ensure food is fully cooked. Avoid raw food/salads.', 'food'],
+    ['t4', 'Obat Pribadi', 'Personal Meds', 'Bawa vitamin kehamilan dan obat anti-mual dari dokter.', 'Bring pregnancy vitamins and anti-nausea meds from doctor.', 'medicine'],
+    ['t5', 'Pendamping', 'Companion', 'Jangan biarkan ibu hamil sendirian. Suami/keluarga wajib mendampingi.', 'Never leave pregnant women alone. Husband/family must accompany.', 'companion'],
+    ['t6', 'Istirahat Cukup', 'Enough Rest', 'Jangan memaksakan diri. Istirahat tiap 30 menit aktivitas.', 'Do not push yourself. Rest every 30 mins of activity.', 'rest'],
+    ['t7', 'Pakaian Nyaman', 'Comfy Clothes', 'Pakai baju longgar berbahan katun dan alas kaki anti-selip.', 'Wear loose cotton clothes and non-slip footwear.', 'clothing'],
+    ['t8', 'Pelampung', 'Life Jacket', 'Wajib pakai pelampung ukuran pas saat naik perahu.', 'Must wear fitted life jacket when on boat.', 'float'],
+    ['t9', 'Posisi Duduk', 'Seating', 'Pilih tempat duduk di tengah perahu (minim guncangan).', 'Choose seats in the middle of the boat (min shock).', 'seat'],
+    ['t10', 'Kontak Darurat', 'Emergency Contact', 'Simpan nomor RS terdekat dan kabari guide jika ada keluhan.', 'Save nearest hospital number and alert guide if issues arise.', 'emergency']
+  ];
+  updateSheet(ss, 'TIPS_DATA', tipsData);
+  
+  // 3. DATA MEDIS (LIST FORMAT - NEWLINE SEPARATED)
+  const medisData = [
+    [
+      'm1', 
+      'Tanda Bahaya Fisik', 'Physical Danger Signs',
+      'Perdarahan dari jalan lahir (flek/darah segar)\nKeluar air ketuban (pecah ketuban)\nNyeri perut bawah yang hebat\nKontraksi yang teratur', 
+      'Bleeding from birth canal\nLeaking amniotic fluid\nSevere lower abdominal pain\nRegular contractions', 
+      '', 'image'
+    ],
+    [
+      'm2', 
+      'Gejala Umum', 'General Symptoms',
+      'Pusing hebat yang tidak hilang\nPandangan mata kabur\nMuntah terus menerus (tidak bisa makan)\nDemam tinggi', 
+      'Severe dizziness that persists\nBlurred vision\nContinuous vomiting (cannot eat)\nHigh fever', 
+      '', 'image'
+    ]
+  ];
+  updateSheet(ss, 'MEDIS_DATA', medisData);
+
+  // 4. QUESTIONS (Standard)
   const questionData = [
     ['q1', 1, 'Apakah usia kehamilannya 4-6 bulan?', 'Is pregnancy 4-6 months?', 'CORE', 'YES'],
     ['q2', 2, 'Apakah ibu merasa sehat dan siap berwisata?', 'Feel healthy & ready?', 'CORE', 'YES'],
@@ -34,23 +87,7 @@ function seedAllContent() {
   ];
   updateSheet(ss, 'SCREENING_QUESTIONS', questionData);
 
-  // 3. DATA TIPS (Info Tambahan)
-  const tipsData = [
-    ['t1', 'Pendampingan', 'Companionship', 'Ibu hamil harus selalu didampingi oleh keluarga dan pemandu.', 'Must always be accompanied by family and guide.', ''],
-    ['t2', 'Pelampung', 'Life Jacket', 'Wajib menggunakan pelampung ukuran pas di perahu/air.', 'Must wear fitted life jacket on boat/water.', ''],
-    ['t3', 'Hidrasi', 'Hydration', 'Minum air cukup & istirahat di tempat teduh.', 'Drink enough water & rest in shade.', ''],
-    ['t4', 'Sunscreen', 'Sunscreen', 'Gunakan Sunscreen SPF30+ dan topi.', 'Use Sunscreen SPF30+ and hat.', ''],
-    ['t5', 'Posisi Duduk', 'Seating', 'Duduk di KURSI TENGAH perahu untuk minimalkan guncangan.', 'Sit in MIDDLE seats to minimize shock.', '']
-  ];
-  updateSheet(ss, 'TIPS_DATA', tipsData);
-  
-  // 4. DATA MEDIS (Kosongkan dulu atau isi sample)
-  const medisData = [
-    ['m1', 'Tanda Bahaya', 'Danger Signs', 'Perdarahan, Ketuban pecah, Nyeri Hebat. STOP & Rujuk ke Faskes.', 'Bleeding, Water break, Severe Pain. STOP & Refer to Hospital.', '', 'image']
-  ];
-  updateSheet(ss, 'MEDIS_DATA', medisData);
-
-  Logger.log("DATABASE SEEDED SUCCESSFULLY!");
+  Logger.log("DATABASE SEEDED SUCCESSFULLY WITH NEW STRUCTURE!");
 }
 
 function updateSheet(ss, sheetName, data) {
@@ -59,13 +96,11 @@ function updateSheet(ss, sheetName, data) {
     sheet = ss.insertSheet(sheetName);
   }
   
-  // Clear old data (keep header if exists, assume row 1 is header)
   const lastRow = sheet.getLastRow();
   if (lastRow > 1) {
     sheet.getRange(2, 1, lastRow - 1, sheet.getMaxColumns()).clearContent();
   }
 
-  // Write new data
   if (data.length > 0) {
     sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
   }

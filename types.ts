@@ -4,17 +4,19 @@ export interface ScreeningResult {
   name: string;
   age: number;
   pregnancyWeeks: number;
-  status: 'ZONA HIJAU' | 'ZONA KUNING' | 'ZONA MERAH' | 'AMAN' | 'BAHAYA'; // Backward compatibility
+  status: 'ZONA HIJAU' | 'ZONA KUNING' | 'ZONA MERAH' | 'AMAN' | 'BAHAYA';
   riskFactors: string;
   notes: string;
 }
 
 export interface SopItem {
   id: string;
-  category: string; // 'persiapan', 'boat', 'lumba', 'snorkeling'
-  safe: boolean; // TRUE = Aman, FALSE = Bahaya
+  category: string;
+  safe: boolean;
   title_id: string;
   title_en: string;
+  subtitle_id: string; // NEW: Keterangan ID
+  subtitle_en: string; // NEW: Keterangan EN
   image_url: string;
   description_id: string;
   description_en: string;
@@ -24,7 +26,8 @@ export interface MedisItem {
   id: string;
   title_id: string;
   title_en: string;
-  action_id: string;
+  // action fields now store newline-separated lists for bullet points
+  action_id: string; 
   action_en: string;
   media_url: string;
   type: 'image' | 'video';
@@ -36,16 +39,16 @@ export interface TipsItem {
   title_en: string;
   content_id: string;
   content_en: string;
-  icon: string;
+  icon: string; // Will store specific icon keys (e.g., 'water', 'sun')
 }
 
 export interface ScreeningQuestion {
   id: string;
-  index: number; // Urutan tampilan
+  index: number;
   text_id: string;
   text_en: string;
-  type: 'CORE' | 'RISK'; // CORE = Syarat Dasar (Logic 1-4), RISK = Gejala Bahaya (Logic 5-10)
-  safe_answer: 'YES' | 'NO'; // Jawaban yang dianggap AMAN
+  type: 'CORE' | 'RISK';
+  safe_answer: 'YES' | 'NO';
 }
 
 export interface DashboardData {
