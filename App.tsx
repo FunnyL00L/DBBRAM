@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './pages/Dashboard';
@@ -144,9 +145,6 @@ const App: React.FC = () => {
           {activeTab === 'screening' && data && <ScreeningInbox data={data.screening} />}
           {activeTab === 'cms' && data && (
             <ContentManager 
-              sopData={data.sop} 
-              medisData={data.medis} 
-              tipsData={data.tips}
               questionsData={data.questions}
               refreshData={() => loadData(true)}
             />

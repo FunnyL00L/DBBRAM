@@ -1,12 +1,10 @@
+
 import { API_URL } from '../constants';
 import { DashboardData } from '../types';
 
 // MOCK DATA (Fallback)
 const MOCK_DATA: DashboardData = {
   screening: [],
-  sop: [],
-  medis: [],
-  tips: [],
   questions: [],
   analytics: { totalViews: 0 }
 };
@@ -72,9 +70,6 @@ export const fetchData = async (): Promise<DashboardData | null> => {
 
         return { 
             screening: json.screening || [],
-            sop: json.sop || [],
-            medis: json.medis || [],
-            tips: json.tips || [],
             questions: json.questions || [],
             analytics: json.analytics || { totalViews: 0 }
         };

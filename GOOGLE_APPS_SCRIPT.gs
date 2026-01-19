@@ -4,10 +4,6 @@
 
 const SHEET_CONFIG = {
   SCREENING_RESULTS: ['Timestamp', 'Name', 'Age', 'PregnancyWeeks', 'Status', 'RiskFactors', 'Notes'],
-  // Added subtitle_id and subtitle_en
-  SOP_DATA: ['id', 'category', 'safe', 'title_id', 'title_en', 'subtitle_id', 'subtitle_en', 'image_url', 'description_id', 'description_en'],
-  MEDIS_DATA: ['id', 'title_id', 'title_en', 'action_id', 'action_en', 'media_url', 'type'],
-  TIPS_DATA: ['id', 'title_id', 'title_en', 'content_id', 'content_en', 'icon'],
   SCREENING_QUESTIONS: ['id', 'index', 'text_id', 'text_en', 'type', 'safe_answer'],
   ANALYTICS_LOG: ['Timestamp', 'Type', 'Info']
 };
@@ -85,23 +81,6 @@ function handleRequest(e) {
       return responseJSON({ status: 'success', message: 'Data saved', count: newData ? newData.length : 0 });
     }
 
-    if (finalAction === 'upload_image') {
-      const folderName = "LOVINAMOM_ASSETS";
-      const folders = DriveApp.getFoldersByName(folderName);
-      const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
-      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-      const decoded = Utilities.base64Decode(payload.data);
-      const blob = Utilities.newBlob(decoded, payload.mimeType, payload.name);
-      const file = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
-      return responseJSON({ 
-        status: 'success', 
-        url: "https://drive.google.com/uc?export=view&id=" + file.getId() 
-      });
-    }
-
     return responseJSON({ status: 'error', message: 'Unknown Action: ' + finalAction });
 
   } catch (err) {
@@ -114,9 +93,6 @@ function handleRequest(e) {
 function getAllData(ss) {
   return {
     screening: getSheetData(ss, 'SCREENING_RESULTS'),
-    sop: getSheetData(ss, 'SOP_DATA'),
-    medis: getSheetData(ss, 'MEDIS_DATA'),
-    tips: getSheetData(ss, 'TIPS_DATA'),
     questions: getSheetData(ss, 'SCREENING_QUESTIONS'),
     analytics: { totalViews: 0 }
   };
@@ -127,12 +103,25 @@ function getSheetData(ss, sheetName) {
   if (!sheet || sheet.getLastRow() < 2) return [];
   
   const raw = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
-  const headers = raw[0];
+  const headers = raw[0].map(h => String(h).trim()); // Trim headers to avoid mismatch
   const rows = raw.slice(1);
   
   return rows.map(row => {
     let obj = {};
-    headers.forEach((h, i) => obj[String(h).trim()] = row[i]);
+    headers.forEach((h, i) => {
+      if (h) {
+        // Map data to expected TypeScript keys (camelCase if necessary)
+        let key = h;
+        if (h === 'Timestamp') key = 'timestamp';
+        if (h === 'Name') key = 'name';
+        if (h === 'Age') key = 'age';
+        if (h === 'PregnancyWeeks') key = 'pregnancyWeeks';
+        if (h === 'Status') key = 'status';
+        if (h === 'RiskFactors') key = 'riskFactors';
+        if (h === 'Notes') key = 'notes';
+        obj[key] = row[i];
+      }
+    });
     return obj;
   });
 }
