@@ -1,0 +1,164 @@
+// COPAS KODE INI KE GOOGLE APPS SCRIPT EDITOR
+// PENTING: Klik Deploy -> Manage Deployments -> Klik Icon Pensil -> Version: "New Version" -> Deploy
+
+const SHEET_CONFIG = {
+  SCREENING_RESULTS: ['Timestamp', 'Name', 'Age', 'PregnancyWeeks', 'Status', 'RiskFactors', 'Notes'],
+  SOP_DATA: ['id', 'category', 'safe', 'title_id', 'title_en', 'image_url', 'description_id', 'description_en'],
+  MEDIS_DATA: ['id', 'title_id', 'title_en', 'action_id', 'action_en', 'media_url', 'type'],
+  TIPS_DATA: ['id', 'title_id', 'title_en', 'content_id', 'content_en', 'icon'],
+  SCREENING_QUESTIONS: ['id', 'index', 'text_id', 'text_en', 'type', 'safe_answer'],
+  ANALYTICS_LOG: ['Timestamp', 'Type', 'Info']
+};
+
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  const lock = LockService.getScriptLock();
+  // Tunggu 10 detik untuk mendapatkan giliran akses database
+  try {
+    lock.waitLock(10000);
+  } catch (e) {
+    return responseJSON({ status: 'error', message: 'Server busy, please try again.' });
+  }
+
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 1. Parsing Input
+    let payload = {};
+    const action = e.parameter ? e.parameter.action : null;
+    
+    if (e.postData && e.postData.contents) {
+      try {
+        payload = JSON.parse(e.postData.contents);
+      } catch (err) {
+        // Jika gagal parse JSON, cek apakah ini test connection
+        if (!action) return responseJSON({ status: 'error', message: 'Invalid JSON' });
+      }
+    }
+    
+    // Gabungkan parameter URL dan Body (prioritas Body)
+    const finalAction = payload.action || action;
+
+    if (finalAction === 'test') {
+      return responseJSON({ status: 'success', message: 'Connection OK' });
+    }
+
+    // --- GET DATA ---
+    if (finalAction === 'get_data') {
+      const data = getAllData(ss);
+      return responseJSON(data);
+    }
+
+    // --- UPDATE DATA (SAVE / DELETE) ---
+    if (finalAction === 'update_data') {
+      const sheetName = payload.sheetName;
+      const newData = payload.data;
+
+      if (!SHEET_CONFIG[sheetName]) {
+        return responseJSON({ status: 'error', message: 'Sheet not found' });
+      }
+
+      const sheet = getOrCreateSheet(ss, sheetName);
+      
+      // 1. Bersihkan Data Lama (Hanya jika ada data sebelumnya)
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        sheet.getRange(2, 1, lastRow - 1, sheet.getMaxColumns()).clearContent();
+      }
+
+      // 2. Tulis Data Baru (Jika array tidak kosong)
+      // Jika kosong, berarti user menghapus semua item (valid behavior)
+      if (newData && newData.length > 0) {
+        const headers = SHEET_CONFIG[sheetName];
+        const rows = newData.map(item => {
+          return headers.map(header => {
+            const val = item[header];
+            // Pastikan ID diperlakukan sebagai string agar tidak berubah format
+            if (header === 'id') return "'" + (val || "");
+            return val === undefined || val === null ? "" : val;
+          });
+        });
+        
+        if (rows.length > 0) {
+          sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+        }
+      }
+
+      return responseJSON({ status: 'success', message: 'Data saved', count: newData ? newData.length : 0 });
+    }
+
+    // --- UPLOAD IMAGE ---
+    if (finalAction === 'upload_image') {
+      const folderName = "LOVINAMOM_ASSETS";
+      const folders = DriveApp.getFoldersByName(folderName);
+      const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+      folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+      const decoded = Utilities.base64Decode(payload.data);
+      const blob = Utilities.newBlob(decoded, payload.mimeType, payload.name);
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+      return responseJSON({ 
+        status: 'success', 
+        url: "https://drive.google.com/uc?export=view&id=" + file.getId() 
+      });
+    }
+
+    return responseJSON({ status: 'error', message: 'Unknown Action: ' + finalAction });
+
+  } catch (err) {
+    return responseJSON({ status: 'error', message: err.toString() });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// --- HELPERS ---
+
+function getAllData(ss) {
+  return {
+    screening: getSheetData(ss, 'SCREENING_RESULTS'),
+    sop: getSheetData(ss, 'SOP_DATA'),
+    medis: getSheetData(ss, 'MEDIS_DATA'),
+    tips: getSheetData(ss, 'TIPS_DATA'),
+    questions: getSheetData(ss, 'SCREENING_QUESTIONS'),
+    analytics: { totalViews: 0 }
+  };
+}
+
+function getSheetData(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  
+  const raw = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
+  const headers = raw[0];
+  const rows = raw.slice(1);
+  
+  return rows.map(row => {
+    let obj = {};
+    headers.forEach((h, i) => obj[String(h).trim()] = row[i]);
+    return obj;
+  });
+}
+
+function getOrCreateSheet(ss, name) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(SHEET_CONFIG[name]);
+  }
+  return sheet;
+}
+
+function responseJSON(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
