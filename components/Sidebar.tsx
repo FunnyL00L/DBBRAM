@@ -28,8 +28,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const openGuestMode = () => {
-    // Membuka WEB APP eksternal
-    window.open('https://e-lovinamomtour.vercel.app/', '_blank');
+    // Membuka Guest App di tab baru menggunakan query param ?mode=guest
+    const url = `${window.location.origin}?mode=guest`;
+    window.open(url, '_blank');
   };
 
   return (

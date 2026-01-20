@@ -5,8 +5,10 @@ import { Dashboard } from './pages/Dashboard';
 import { ScreeningInbox } from './pages/ScreeningInbox';
 import { ContentManager } from './pages/ContentManager';
 import { Login } from './pages/Login';
+import { ScreeningForm } from './pages/ScreeningForm';
 import { fetchData } from './services/api';
 import { DashboardData } from './types';
+import { TEMPLATE_DATA } from './data/templateData';
 import { Menu } from 'lucide-react'; // Icon Hamburger
 
 const App: React.FC = () => {
@@ -25,14 +27,15 @@ const App: React.FC = () => {
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   
+  // Guest Mode State
+  const [isGuestMode, setIsGuestMode] = useState(false);
+  
   const isFetchingRef = useRef(false);
 
-  // --- 1. HANDLE GUEST REDIRECT ---
+  // --- 1. HANDLE GUEST MODE ---
   useEffect(() => {
-    const isGuestMode = new URLSearchParams(window.location.search).get('mode') === 'guest';
-    if (isGuestMode) {
-      window.location.href = 'https://e-lovinamomtour.vercel.app/';
-    }
+    const isGuest = new URLSearchParams(window.location.search).get('mode') === 'guest';
+    setIsGuestMode(isGuest);
   }, []);
 
   // --- 2. NETWORK LISTENERS ---
@@ -103,30 +106,42 @@ const App: React.FC = () => {
 
   // Background Sync (Admin Only)
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isGuestMode) return;
     const interval = setInterval(() => {
        if (activeTab !== 'cms' && navigator.onLine) loadData(true);
     }, 10000); // Sync every 10s
     return () => clearInterval(interval);
-  }, [isAuthenticated, activeTab]);
+  }, [isAuthenticated, activeTab, isGuestMode]);
 
 
-  // --- VIEW: ADMIN AUTHENTICATION ---
-  if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  // --- VIEW: LOADING STATE (ADMIN) ---
+  // --- VIEW: LOADING STATE ---
   if (isLoadingInitial && !data) {
      return (
        <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
          <div className="flex flex-col items-center gap-4 text-center p-6">
             <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
-            <h2 className="text-xl font-bold text-white">LovinaMom Admin</h2>
-            <p className="text-cyan-400/70 text-sm animate-pulse">Menghubungkan ke sistem GIS Bali...</p>
+            <h2 className="text-xl font-bold text-white">{isGuestMode ? 'LovinaMom' : 'LovinaMom Admin'}</h2>
+            <p className="text-cyan-400/70 text-sm animate-pulse">
+               {isGuestMode ? 'Memuat Formulir Screening...' : 'Menghubungkan ke sistem GIS Bali...'}
+            </p>
          </div>
        </div>
      );
+  }
+
+  // --- VIEW: GUEST APP ---
+  if (isGuestMode) {
+     // Gunakan Data Live jika ada, fallback ke Template jika error/kosong agar form tetap muncul
+     const questions = (data?.questions && data.questions.length > 0) 
+        ? data.questions 
+        : TEMPLATE_DATA.QUESTIONS;
+
+     return <ScreeningForm questions={questions} />;
+  }
+
+  // --- VIEW: ADMIN AUTHENTICATION ---
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
   }
 
   // --- VIEW: ADMIN DASHBOARD (MAIN) ---
