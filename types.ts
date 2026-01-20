@@ -7,6 +7,10 @@ export interface ScreeningResult {
   status: 'ZONA HIJAU' | 'ZONA KUNING' | 'ZONA MERAH' | 'AMAN' | 'BAHAYA';
   riskFactors: string;
   notes: string;
+  // Location Data
+  lat?: number;
+  lng?: number;
+  locationName?: string; // e.g. "Lovina Beach", "Kuta"
 }
 
 export interface ScreeningQuestion {

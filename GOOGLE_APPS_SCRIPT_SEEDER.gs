@@ -1,15 +1,18 @@
 
-// INSTRUKSI:
-// 1. Buat File Script baru di Google Apps Script Editor.
-// 2. Paste kode ini.
-// 3. Simpan, lalu Pilih fungsi "seedAllContent" di toolbar atas.
-// 4. Klik "Run".
+// ==========================================
+// SCRIPT UNTUK RESET & SETUP DATABASE BARU
+// ==========================================
 
-function seedAllContent() {
+function setupNewDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // 1. DATA QUESTIONS (Standard)
-  const questionData = [
+  // 1. SETUP SHEET SCREENING RESULTS (Header Baru: Lokasi di depan)
+  setupSheet(ss, 'SCREENING_RESULTS', ['Timestamp', 'Lat', 'Lng', 'LocationName', 'Name', 'Age', 'PregnancyWeek', 'Status', 'RiskFactors', 'Notes']);
+  
+  // 2. SETUP SHEET QUESTIONS & ISI DATA DEFAULT
+  setupSheet(ss, 'SCREENING_QUESTIONS', ['id', 'index', 'text_id', 'text_en', 'type', 'safe_answer']);
+  
+  const defaultQuestions = [
     ['q1', 1, 'Apakah usia kehamilannya 4-6 bulan?', 'Is pregnancy 4-6 months?', 'CORE', 'YES'],
     ['q2', 2, 'Apakah ibu merasa sehat dan siap berwisata?', 'Feel healthy & ready?', 'CORE', 'YES'],
     ['q3', 3, 'Apakah bayi dalam kandungan bergerak secara teratur?', 'Baby moving regularly?', 'CORE', 'YES'],
@@ -21,23 +24,22 @@ function seedAllContent() {
     ['q9', 9, 'Apakah merasa pusing hebat, ingin pingsan, sesak?', 'Dizzy/Faint/Breathless?', 'RISK', 'NO'],
     ['q10', 10, 'Apakah ada penyakit lain yang dilarang dokter?', 'Other prohibited conditions?', 'RISK', 'NO']
   ];
-  updateSheet(ss, 'SCREENING_QUESTIONS', questionData);
+  
+  const qSheet = ss.getSheetByName('SCREENING_QUESTIONS');
+  if (qSheet.getLastRow() <= 1) {
+    qSheet.getRange(2, 1, defaultQuestions.length, defaultQuestions[0].length).setValues(defaultQuestions);
+  }
 
-  Logger.log("DATABASE SEEDED SUCCESSFULLY WITH NEW STRUCTURE (LOGIC ONLY)!");
+  Logger.log("DATABASE BERHASIL DI-SETUP! Siap digunakan.");
 }
 
-function updateSheet(ss, sheetName, data) {
-  let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
+function setupSheet(ss, name, headers) {
+  let sheet = ss.getSheetByName(name);
+  if (sheet) {
+    sheet.clear(); // Hapus data lama jika ada
+  } else {
+    sheet = ss.insertSheet(name);
   }
-  
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, sheet.getMaxColumns()).clearContent();
-  }
-
-  if (data.length > 0) {
-    sheet.getRange(2, 1, data.length, data[0].length).setValues(data);
-  }
+  sheet.appendRow(headers);
+  sheet.setFrozenRows(1);
 }

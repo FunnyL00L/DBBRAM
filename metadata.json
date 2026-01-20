@@ -1,5 +1,7 @@
 {
-  "name": "LovinaMomTour Admin",
-  "description": "Admin Dashboard for managing LovinaMomTour content and monitoring screening results.",
-  "requestFramePermissions": []
+  "name": "LovinaMom Mobile Screening",
+  "description": "Aplikasi screening keselamatan ibu hamil dengan pelacakan lokasi real-time.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
 }

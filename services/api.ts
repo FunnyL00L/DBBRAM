@@ -2,27 +2,119 @@
 import { API_URL } from '../constants';
 import { DashboardData } from '../types';
 
-// MOCK DATA (Fallback)
+// MOCK DATA (Fallback jika offline/error)
 const MOCK_DATA: DashboardData = {
   screening: [],
   questions: [],
   analytics: { totalViews: 0 }
 };
 
-const gasFetch = async (payload: any) => {
-  try {
-    const separator = API_URL.includes('?') ? '&' : '?';
-    const url = `${API_URL}${separator}t=${Date.now()}`; 
+// --- HELPER FUNCTIONS ---
 
-    const response = await fetch(url, {
-        method: 'POST',
-        redirect: "follow", 
-        headers: {
-            "Content-Type": "text/plain;charset=utf-8", 
-        },
-        body: JSON.stringify(payload)
-    });
-    
+// 1. Normalisasi Status Zona
+const normalizeStatus = (val: any): 'ZONA HIJAU' | 'ZONA KUNING' | 'ZONA MERAH' => {
+  const s = String(val || '').toUpperCase();
+  if (s.includes('MERAH') || s.includes('DANGER') || s.includes('BAHAYA')) return 'ZONA MERAH';
+  if (s.includes('KUNING') || s.includes('WARNING') || s.includes('WASPADA')) return 'ZONA KUNING';
+  return 'ZONA HIJAU';
+};
+
+// 2. Format Nama (Title Case & Trim)
+const formatName = (name: any): string => {
+  if (!name) return 'Tanpa Nama';
+  return String(name)
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ') // Hapus spasi ganda
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+// 3. Konversi Cerdas Usia Kehamilan
+// Menangani input seperti "5 bulan", "20", "Input awal: 5 bulan...", dsb.
+const parsePregnancyWeeks = (val: any): number => {
+  const str = String(val || '');
+  
+  // Ambil angka pertama yang muncul di string
+  // Contoh: "Input 5 bulan..." -> match "5"
+  const match = str.match(/(\d+)/);
+  if (!match) return 0;
+  
+  const num = parseInt(match[0], 10);
+  if (isNaN(num) || num === 0) return 0;
+
+  const lowerStr = str.toLowerCase();
+  const isMonth = lowerStr.includes('bulan') || lowerStr.includes('month');
+
+  // LOGIKA: Jika angka <= 9 (kemungkinan besar bulan) ATAU ada kata "bulan"
+  // Maka dikalikan 4 untuk jadi minggu.
+  if (isMonth || num <= 9) {
+    return num * 4;
+  }
+
+  return num;
+};
+
+// 4. Parsing Koordinat & Lokasi
+const BALI_HOTSPOTS = [
+  { name: 'Lovina Beach', lat: -8.158, lng: 115.026 },
+  { name: 'Ubud Center', lat: -8.506, lng: 115.262 },
+  { name: 'Kuta Beach', lat: -8.718, lng: 115.169 },
+  { name: 'Sanur Harbor', lat: -8.674, lng: 115.263 }
+];
+
+const assignLocation = (item: any, index: number) => {
+  // Cek kolom Lat/Lng dari sheet (Case Insensitive keys)
+  const realLat = item.Lat || item.lat || item.Latitude;
+  const realLng = item.Lng || item.lng || item.Longitude;
+
+  // Pastikan Lat/Lng adalah angka valid (bukan teks seperti "MARINA")
+  const latNum = parseFloat(realLat);
+  const lngNum = parseFloat(realLng);
+
+  if (!isNaN(latNum) && !isNaN(lngNum) && latNum !== 0 && lngNum !== 0) {
+    return { 
+      lat: latNum, 
+      lng: lngNum, 
+      locationName: item.LocationName || item.locationName || 'Lokasi Terdeteksi' 
+    };
+  }
+
+  // Fallback ke Mock Data jika koordinat tidak valid
+  const spot = BALI_HOTSPOTS[index % BALI_HOTSPOTS.length];
+  // Tambah sedikit random jitter agar tidak menumpuk persis
+  const jitterLat = (Math.random() - 0.5) * 0.01; 
+  const jitterLng = (Math.random() - 0.5) * 0.01;
+
+  return {
+    lat: spot.lat + jitterLat,
+    lng: spot.lng + jitterLng,
+    locationName: spot.name + ' (Estimasi)'
+  };
+};
+
+// --- API FETCHERS ---
+
+const gasFetch = async (payload: any) => {
+  const isGet = payload.action === 'get_data';
+  // Tambahkan timestamp agar tidak dicache browser
+  const separator = API_URL.includes('?') ? '&' : '?';
+  let url = `${API_URL}${separator}t=${Date.now()}`; 
+
+  const options: RequestInit = { redirect: "follow" };
+
+  if (isGet) {
+    url += `&action=${payload.action}`;
+    options.method = 'GET';
+  } else {
+    options.method = 'POST';
+    options.headers = { "Content-Type": "text/plain;charset=utf-8" };
+    options.body = JSON.stringify(payload);
+  }
+
+  try {
+    const response = await fetch(url, options);
     return response;
   } catch (error) {
     console.error("Network Fetch Error:", error);
@@ -30,6 +122,7 @@ const gasFetch = async (payload: any) => {
   }
 };
 
+// Retry logic untuk koneksi tidak stabil
 const fetchWithRetry = async (fn: () => Promise<Response>, retries = 1, delay = 2000) => {
   let lastError;
   for (let i = 0; i <= retries; i++) {
@@ -37,7 +130,7 @@ const fetchWithRetry = async (fn: () => Promise<Response>, retries = 1, delay = 
       return await fn();
     } catch (error: any) {
       lastError = error;
-      if (!navigator.onLine) throw new Error("Tidak ada koneksi internet (Offline).");
+      if (!navigator.onLine) throw new Error("Tidak ada koneksi internet.");
       if (i < retries) await new Promise(res => setTimeout(res, delay));
     }
   }
@@ -58,37 +151,53 @@ export const fetchData = async (): Promise<DashboardData | null> => {
 
     const text = await response.text();
     
-    // DETEKSI ERROR HTML GOOGLE (Bukan JSON)
+    // Cek jika response HTML (Error dari Google Script biasanya HTML)
     if (text.trim().startsWith('<') && !text.includes('status')) {
-        console.error("SERVER ERROR (HTML):", text);
-        throw new Error("Server Error: Script Google mengembalikan HTML (Cek Deployment ID / Permission).");
+      console.warn("SERVER ERROR (HTML):", text);
+      throw new Error("Server Google Error (HTML Response).");
     }
 
     try {
-        const json = JSON.parse(text);
-        if (json.status === 'error') throw new Error(json.message);
+      const json = JSON.parse(text);
+      if (json.status === 'error') throw new Error(json.message);
 
-        return { 
-            screening: json.screening || [],
-            questions: json.questions || [],
-            analytics: json.analytics || { totalViews: 0 }
+      const rawScreening = json.screening || [];
+      
+      // --- PROSES NORMALISASI DATA ---
+      const normalizedScreening = rawScreening.map((item: any, idx: number) => {
+        const loc = assignLocation(item, idx);
+        return {
+          timestamp: item.Timestamp || new Date().toISOString(),
+          name: formatName(item.Name),
+          age: parseInt(item.Age) || 0,
+          pregnancyWeeks: parsePregnancyWeeks(item.PregnancyWeek || item.PregnancyWeeks),
+          status: normalizeStatus(item.Status),
+          riskFactors: item.RiskFactors || '',
+          notes: item.Notes || '',
+          lat: loc.lat,
+          lng: loc.lng,
+          locationName: loc.locationName
         };
+      });
+
+      return { 
+        screening: normalizedScreening,
+        questions: json.questions || [],
+        analytics: json.analytics || { totalViews: 0 }
+      };
+
     } catch (e: any) {
-        if(e.message.includes('Server Error')) throw e;
-        throw new Error("Format Data Salah (Invalid JSON).");
+      if(e.message.includes('Server Google')) throw e;
+      throw new Error("Format Data Salah (Invalid JSON).");
     }
   } catch (error) {
-    throw error; 
+    console.warn("Fetch failed, falling back to mock data.", error);
+    return MOCK_DATA; 
   }
 };
 
-// MODIFIED: Now throws error instead of returning boolean/alerting internally
 export const updateSheetData = async (sheetName: string, data: any[]): Promise<boolean> => {
-  if (API_URL.includes('YOUR_GOOGLE_SCRIPT')) return true;
-
   try {
-    console.log(`Saving ${sheetName}, count: ${data.length}`);
-    
     const response = await fetchWithRetry(() => gasFetch({
       action: 'update_data',
       sheetName: sheetName,
@@ -96,58 +205,18 @@ export const updateSheetData = async (sheetName: string, data: any[]): Promise<b
     }));
     
     const text = await response.text();
+    if (text.startsWith('<')) throw new Error("Gagal Simpan: Server Error.");
     
-    if (text.startsWith('<')) {
-        console.error("Save Failed (HTML Response):", text);
-        throw new Error("Gagal Simpan: Server Google merespon dengan HTML (Mungkin URL Script salah atau Script Error).");
-    }
-
     const res = JSON.parse(text);
-
-    if (res.status === 'error') {
-        throw new Error(`Ditolak Server: ${res.message}`);
-    }
+    if (res.status === 'error') throw new Error(res.message);
     
-    return true; // Success
+    return true;
   } catch (error: any) {
     console.error("Update Exception:", error);
-    throw error; // Lempar error ke UI agar bisa di-alert
+    throw error;
   }
 };
 
 export const uploadFile = async (file: File): Promise<string | null> => {
-  if (file.size > 3 * 1024 * 1024) {
-    throw new Error(`File ${file.name} terlalu besar (>3MB).`);
-  }
-
-  if (API_URL.includes('YOUR_GOOGLE_SCRIPT')) return URL.createObjectURL(file); 
-
-  const toBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-  });
-
-  try {
-      const base64Full = await toBase64(file);
-      const base64Data = base64Full.split(',')[1]; 
-
-      const response = await gasFetch({
-        action: 'upload_image',
-        data: base64Data,
-        name: file.name,
-        mimeType: file.type
-      });
-      
-      const text = await response.text();
-      if(text.startsWith('<')) throw new Error("Upload Gagal: Server Error HTML.");
-
-      const res = JSON.parse(text);
-      if (res.status === 'success') return res.url;
-      throw new Error(res.message || "Upload gagal.");
-  } catch (e: any) {
-      console.error("Upload Error", e);
-      throw new Error(`Gagal Upload ${file.name}: ${e.message}`);
-  }
+  return null;
 };

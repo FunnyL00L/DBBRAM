@@ -7,13 +7,18 @@ import { ContentManager } from './pages/ContentManager';
 import { Login } from './pages/Login';
 import { fetchData } from './services/api';
 import { DashboardData } from './types';
+import { Menu } from 'lucide-react'; // Icon Hamburger
 
 const App: React.FC = () => {
+  // --- STATE ---
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState<DashboardData | null>(null);
   
-  // State Status
+  // Mobile Sidebar State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  // Loading & Sync States
   const [isLoadingInitial, setIsLoadingInitial] = useState(true); 
   const [isSyncing, setIsSyncing] = useState(false); 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -22,7 +27,15 @@ const App: React.FC = () => {
   
   const isFetchingRef = useRef(false);
 
-  // Monitor Network Browser
+  // --- 1. HANDLE GUEST REDIRECT ---
+  useEffect(() => {
+    const isGuestMode = new URLSearchParams(window.location.search).get('mode') === 'guest';
+    if (isGuestMode) {
+      window.location.href = 'https://e-lovinamomtour.vercel.app/';
+    }
+  }, []);
+
+  // --- 2. NETWORK LISTENERS ---
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -34,9 +47,12 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // --- 3. AUTH CHECK (ADMIN ONLY) ---
   useEffect(() => {
     const auth = localStorage.getItem('lovina_admin_auth');
-    if (auth === 'true') setIsAuthenticated(true);
+    if (auth === 'true') {
+      setIsAuthenticated(true);
+    }
   }, []);
 
   const handleLogin = () => {
@@ -49,18 +65,13 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
   };
 
-  // --- CORE DATA FETCHING ---
+  // --- 4. DATA FETCHING ---
   const loadData = async (isBackground = false) => {
-    if (!isAuthenticated) return;
     if (isFetchingRef.current) return; 
-
     isFetchingRef.current = true;
     
-    if (isBackground) {
-        setIsSyncing(true);
-    } else {
-        setIsLoadingInitial(true);
-    }
+    if (isBackground) setIsSyncing(true);
+    else setIsLoadingInitial(true);
     
     try {
       const result = await fetchData();
@@ -71,9 +82,7 @@ const App: React.FC = () => {
         setIsOnline(true); 
       }
     } catch (e: any) {
-      console.error("Sync Error:", e);
       const msg = e.message || "Unknown error";
-      
       if (msg.includes('Failed to fetch') || msg.includes('Network')) {
          setIsOnline(false); 
          setFetchError("Koneksi Server Terputus");
@@ -89,53 +98,76 @@ const App: React.FC = () => {
 
   // Initial Load
   useEffect(() => {
-    if (isAuthenticated) {
-        loadData(false);
-    }
-  }, [isAuthenticated]);
+    loadData(false);
+  }, []);
 
-  // Auto Refresh Interval (1 Detik)
+  // Background Sync (Admin Only)
   useEffect(() => {
     if (!isAuthenticated) return;
-
     const interval = setInterval(() => {
-       // Hanya refresh otomatis jika TIDAK sedang mengedit konten (CMS)
-       if (activeTab !== 'cms' && navigator.onLine) {
-          loadData(true);
-       }
-    }, 1000); // 1000ms = 1 Detik
-
+       if (activeTab !== 'cms' && navigator.onLine) loadData(true);
+    }, 10000); // Sync every 10s
     return () => clearInterval(interval);
   }, [isAuthenticated, activeTab]);
 
+
+  // --- VIEW: ADMIN AUTHENTICATION ---
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />;
   }
 
+  // --- VIEW: LOADING STATE (ADMIN) ---
   if (isLoadingInitial && !data) {
      return (
        <div className="h-screen w-screen bg-gray-900 flex items-center justify-center">
-         <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin"></div>
-            <p className="text-cyan-400 font-bold animate-pulse">Menghubungkan ke Database...</p>
+         <div className="flex flex-col items-center gap-4 text-center p-6">
+            <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mb-4"></div>
+            <h2 className="text-xl font-bold text-white">LovinaMom Admin</h2>
+            <p className="text-cyan-400/70 text-sm animate-pulse">Menghubungkan ke sistem GIS Bali...</p>
          </div>
        </div>
      );
   }
 
+  // --- VIEW: ADMIN DASHBOARD (MAIN) ---
   return (
-    <div className="flex h-screen w-screen bg-gradient-to-br from-blue-950 via-gray-900 to-slate-900 overflow-hidden text-white">
+    <div className="flex h-screen w-screen bg-gradient-to-br from-blue-950 via-gray-900 to-slate-900 overflow-hidden text-white relative">
+      
+      {/* MOBILE HAMBURGER BUTTON (Floating) */}
+      <div className="lg:hidden fixed top-4 left-4 z-[60]">
+        <button 
+          onClick={() => setIsSidebarOpen(true)}
+          className="p-2 bg-black/40 backdrop-blur border border-white/20 rounded-lg text-white shadow-lg active:scale-95 transition-all"
+        >
+          <Menu size={24} />
+        </button>
+      </div>
+
+      {/* SIDEBAR (Responsive) */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={(tab) => {
+          setActiveTab(tab);
+          setIsSidebarOpen(false); // Close sidebar on mobile after selection
+        }} 
         onLogout={handleLogout} 
         isOnline={isOnline}
         isSyncing={isSyncing}
         fetchError={fetchError}
         lastSynced={lastSynced}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
-      <main className="flex-1 h-full overflow-hidden relative flex flex-col">
+      {/* OVERLAY FOR MOBILE SIDEBAR */}
+      {isSidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/60 z-[50] backdrop-blur-sm"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      <main className="flex-1 h-full overflow-hidden relative flex flex-col pt-16 lg:pt-0">
         {/* Background Effects */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-cyan-500/10 blur-[120px] rounded-full pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none" />

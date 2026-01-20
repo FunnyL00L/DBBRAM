@@ -1,9 +1,11 @@
 
-// COPAS KODE INI KE GOOGLE APPS SCRIPT EDITOR
-// PENTING: Klik Deploy -> Manage Deployments -> Klik Icon Pensil -> Version: "New Version" -> Deploy
+// ==========================================
+// LOVINAMOM BACKEND v2.0 (Mobile Optimized)
+// ==========================================
 
 const SHEET_CONFIG = {
-  SCREENING_RESULTS: ['Timestamp', 'Name', 'Age', 'PregnancyWeeks', 'Status', 'RiskFactors', 'Notes'],
+  // URUTAN KOLOM BARU: Lokasi di depan Nama
+  SCREENING_RESULTS: ['Timestamp', 'Lat', 'Lng', 'LocationName', 'Name', 'Age', 'PregnancyWeek', 'Status', 'RiskFactors', 'Notes'],
   SCREENING_QUESTIONS: ['id', 'index', 'text_id', 'text_en', 'type', 'safe_answer'],
   ANALYTICS_LOG: ['Timestamp', 'Type', 'Info']
 };
@@ -39,15 +41,35 @@ function handleRequest(e) {
     
     const finalAction = payload.action || action;
 
-    if (finalAction === 'test') {
-      return responseJSON({ status: 'success', message: 'Connection OK' });
+    // --- ACTION: SUBMIT SCREENING (Dari Guest App) ---
+    if (finalAction === 'submit_screening') {
+      const sheet = getOrCreateSheet(ss, 'SCREENING_RESULTS');
+      const data = payload.data;
+      
+      const newRow = [
+        new Date(),                 // Timestamp
+        data.lat || '',             // Lat
+        data.lng || '',             // Lng
+        data.locationName || '',    // LocationName
+        data.name,                  // Name
+        data.age,                   // Age
+        data.pregnancyWeeks,        // Weeks
+        data.status,                // Status (Zona)
+        data.riskFactors,           // Risk Factors
+        data.notes                  // Notes
+      ];
+
+      sheet.appendRow(newRow);
+      return responseJSON({ status: 'success', message: 'Data Recorded', row: sheet.getLastRow() });
     }
 
+    // --- ACTION: GET DATA (Untuk Admin Dashboard) ---
     if (finalAction === 'get_data') {
       const data = getAllData(ss);
       return responseJSON(data);
     }
 
+    // --- ACTION: UPDATE DATA (Untuk Logic Manager) ---
     if (finalAction === 'update_data') {
       const sheetName = payload.sheetName;
       const newData = payload.data;
@@ -58,17 +80,19 @@ function handleRequest(e) {
 
       const sheet = getOrCreateSheet(ss, sheetName);
       
+      // Clear old data (keep header)
       const lastRow = sheet.getLastRow();
       if (lastRow > 1) {
         sheet.getRange(2, 1, lastRow - 1, sheet.getMaxColumns()).clearContent();
       }
 
+      // Write new data
       if (newData && newData.length > 0) {
         const headers = SHEET_CONFIG[sheetName];
         const rows = newData.map(item => {
           return headers.map(header => {
             const val = item[header];
-            if (header === 'id') return "'" + (val || "");
+            if (header === 'id') return "'" + (val || ""); // Force string for IDs
             return val === undefined || val === null ? "" : val;
           });
         });
@@ -103,25 +127,12 @@ function getSheetData(ss, sheetName) {
   if (!sheet || sheet.getLastRow() < 2) return [];
   
   const raw = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
-  const headers = raw[0].map(h => String(h).trim()); // Trim headers to avoid mismatch
+  const headers = raw[0];
   const rows = raw.slice(1);
   
   return rows.map(row => {
     let obj = {};
-    headers.forEach((h, i) => {
-      if (h) {
-        // Map data to expected TypeScript keys (camelCase if necessary)
-        let key = h;
-        if (h === 'Timestamp') key = 'timestamp';
-        if (h === 'Name') key = 'name';
-        if (h === 'Age') key = 'age';
-        if (h === 'PregnancyWeeks') key = 'pregnancyWeeks';
-        if (h === 'Status') key = 'status';
-        if (h === 'RiskFactors') key = 'riskFactors';
-        if (h === 'Notes') key = 'notes';
-        obj[key] = row[i];
-      }
-    });
+    headers.forEach((h, i) => obj[String(h).trim()] = row[i]);
     return obj;
   });
 }
@@ -130,7 +141,7 @@ function getOrCreateSheet(ss, name) {
   let sheet = ss.getSheetByName(name);
   if (!sheet) {
     sheet = ss.insertSheet(name);
-    sheet.appendRow(SHEET_CONFIG[name]);
+    sheet.appendRow(SHEET_CONFIG[name]); // Set Header Otomatis
   }
   return sheet;
 }
