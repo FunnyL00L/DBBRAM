@@ -74,7 +74,9 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
     const issues: string[] = [];
 
     // Cek Minggu
-    const weeks = parseInt(formData.pregnancyWeeks);
+    const weeks = parseInt(formData.pregnancyWeeks) || 0;
+    const ageNum = parseInt(formData.age) || 0;
+
     if (weeks < 14 || weeks > 26) {
       status = 'ZONA MERAH';
       issues.push(weeks < 14 ? "Hamil <14 Mgg" : "Hamil >26 Mgg");
@@ -96,7 +98,7 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
     // DATA YANG DIKIRIM KE GOOGLE SHEET
     const finalData = {
       name: formData.name,
-      age: formData.age,
+      age: ageNum,
       pregnancyWeeks: weeks,
       status: status,
       riskFactors: issues.join(', '),

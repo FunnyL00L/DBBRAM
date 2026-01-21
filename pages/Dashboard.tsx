@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { MapContainer, TileLayer, CircleMarker, Popup, Circle, useMap } from 'react-leaflet';
-import { LatLngBoundsExpression } from 'leaflet';
+import { LatLngBoundsExpression, LocationEvent } from 'leaflet';
 
 interface DashboardProps {
   data: ScreeningResult[];
@@ -30,7 +30,7 @@ const MyLocationMarker = () => {
   const map = useMap();
 
   useEffect(() => {
-    map.locate().on("locationfound", function (e) {
+    map.locate().on("locationfound", function (e: LocationEvent) {
       if (e.latlng.lat > -8.95 && e.latlng.lat < -7.90 && e.latlng.lng > 114.3 && e.latlng.lng < 115.8) {
         setPosition(e.latlng);
       }
