@@ -1,5 +1,5 @@
+
 import React, { useState, useEffect } from 'react';
-import { GlassCard } from '../components/GlassCard';
 import { ScreeningQuestion } from '../types';
 import { MapPin, Baby, ChevronRight, CheckCircle, AlertCircle, Loader2, Navigation } from 'lucide-react';
 import { API_URL } from '../constants';
@@ -26,7 +26,7 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
   useEffect(() => {
     if (step === 'LOCATING') {
       if (!navigator.geolocation) {
-        setLocation({ lat: -8.409, lng: 115.188, name: 'Bali (GPS Not Supported)' });
+        setLocation({ lat: -8.112, lng: 115.088, name: 'Buleleng (GPS Manual)' });
         setStep('IDENTITY');
         return;
       }
@@ -36,16 +36,16 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
           setLocation({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            name: 'Lokasi Akurat (GPS)'
+            name: 'Lokasi Terkini'
           });
           setStep('IDENTITY');
         },
         (err) => {
           console.warn("GPS Denied", err);
-          setLocation({ lat: -8.409, lng: 115.188, name: 'Bali (Manual/Estimated)' });
+          setLocation({ lat: -8.112, lng: 115.088, name: 'Buleleng (GPS Error)' });
           setStep('IDENTITY');
         },
-        { enableHighAccuracy: true, timeout: 5000 }
+        { enableHighAccuracy: true, timeout: 8000 }
       );
     }
   }, [step]);
@@ -77,41 +77,48 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
     const weeks = parseInt(formData.pregnancyWeeks);
     if (weeks < 14 || weeks > 26) {
       status = 'ZONA MERAH';
-      issues.push(weeks < 14 ? "Usia kehamilan < 14 minggu" : "Usia kehamilan > 26 minggu");
+      issues.push(weeks < 14 ? "Hamil <14 Mgg" : "Hamil >26 Mgg");
     }
 
     // Cek Jawaban Quiz
     for (const q of sortedQuestions) {
       const userAns = formData.answers[q.id];
       if (userAns !== q.safe_answer) {
-        // Fix: Ensure we don't downgrade from RED to YELLOW
         if (q.type === 'RISK') {
           status = 'ZONA MERAH';
         } else if (status !== 'ZONA MERAH') {
           status = 'ZONA KUNING';
         }
-        issues.push(`Gagal pada: ${q.text_id}`);
+        issues.push(`${q.text_id}`);
       }
     }
 
+    // DATA YANG DIKIRIM KE GOOGLE SHEET
     const finalData = {
       name: formData.name,
-      age: parseInt(formData.age),
+      age: formData.age,
       pregnancyWeeks: weeks,
       status: status,
       riskFactors: issues.join(', '),
-      notes: `Lat: ${location?.lat}, Lng: ${location?.lng}`,
-      lat: location?.lat,
-      lng: location?.lng,
-      locationName: location?.name
+      lat: location?.lat || 0,
+      lng: location?.lng || 0,
+      locationName: location?.name || 'Unknown'
     };
 
     try {
+      // DEBUG: Cek URL
+      if (!API_URL || API_URL.includes('PASTE')) {
+        alert("URL API belum disetting!");
+        setIsSubmitting(false);
+        return;
+      }
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: 'submit_screening', data: finalData })
       });
+      
       const res = await response.json();
       
       if (res.status === 'success') {
@@ -119,12 +126,15 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
           status: status,
           message: status === 'ZONA HIJAU' ? 'Selamat! Anda aman untuk berwisata.' : 
                    status === 'ZONA KUNING' ? 'Perhatian! Dibutuhkan pengawasan khusus.' : 
-                   'Maaf, demi keselamatan, Anda tidak diizinkan ikut.'
+                   'Maaf, demi keselamatan, Anda tidak direkomendasikan ikut.'
         });
         setStep('RESULT');
+      } else {
+        alert("Gagal menyimpan data: " + res.message);
       }
-    } catch (e) {
-      alert("Koneksi gagal, silakan coba lagi.");
+    } catch (e: any) {
+      console.error(e);
+      alert("Terjadi kesalahan koneksi. Pastikan internet lancar.");
     } finally {
       setIsSubmitting(false);
     }
@@ -147,7 +157,7 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
          {location && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-gray-400">
                <MapPin size={12} className="text-red-500" />
-               Bali, ID
+               GPS Aktif
             </div>
          )}
       </div>
@@ -163,7 +173,7 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
               </div>
               <div>
                  <h2 className="text-xl font-bold mb-2">Mengunci Koordinat...</h2>
-                 <p className="text-sm text-gray-400">Mohon izinkan GPS untuk keamanan maksimal saat tour.</p>
+                 <p className="text-sm text-gray-400">Mohon tunggu sebentar, sedang mendeteksi lokasi.</p>
               </div>
            </div>
         )}
@@ -262,7 +272,7 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
                 <div className="fixed inset-0 bg-black/80 backdrop-blur flex items-center justify-center z-[200]">
                    <div className="flex flex-col items-center gap-4">
                       <Loader2 size={48} className="text-cyan-400 animate-spin" />
-                      <p className="font-bold text-white">Menganalisis Jawaban Anda...</p>
+                      <p className="font-bold text-white">Menyimpan Data...</p>
                    </div>
                 </div>
               )}
@@ -297,11 +307,11 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
                  <div className="space-y-3 text-left">
                     <div className="flex gap-3 items-start">
                        <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
-                       <p className="text-xs text-gray-400">Data ini telah tersimpan dan terpantau oleh admin tour.</p>
+                       <p className="text-xs text-gray-400">Data telah tersimpan di sistem admin.</p>
                     </div>
                     <div className="flex gap-3 items-start">
                        <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0" />
-                       <p className="text-xs text-gray-400">Tunjukkan layar ini kepada staf operasional di dermaga.</p>
+                       <p className="text-xs text-gray-400">Tunjukkan layar ini kepada petugas kapal.</p>
                     </div>
                  </div>
               </div>
@@ -310,16 +320,12 @@ export const ScreeningForm: React.FC<ScreeningFormProps> = ({ questions }) => {
                  onClick={() => window.location.reload()}
                  className="px-10 py-4 rounded-full bg-white/10 text-white font-bold text-sm active:scale-95 transition-all"
               >
-                 Selesai & Keluar
+                 Selesai
               </button>
            </div>
         )}
 
       </div>
-
-      <footer className="w-full max-w-md py-6 text-center text-[10px] text-gray-600 font-medium">
-         &copy; 2024 LovinaMom Bali Safety GIS. All Rights Reserved.
-      </footer>
     </div>
   );
 };

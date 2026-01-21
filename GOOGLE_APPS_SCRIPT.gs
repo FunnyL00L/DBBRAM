@@ -1,152 +1,152 @@
 
 // ==========================================
-// LOVINAMOM BACKEND v2.0 (Mobile Optimized)
+// LOVINAMOM: BACKEND SCRIPT
+// COPY CODE INI KE GOOGLE APPS SCRIPT EDITOR
+// LALU KLIK DEPLOY > NEW DEPLOYMENT > WHO HAS ACCESS: ANYONE
 // ==========================================
 
-const SHEET_CONFIG = {
-  // URUTAN KOLOM BARU: Lokasi di depan Nama
-  SCREENING_RESULTS: ['Timestamp', 'Lat', 'Lng', 'LocationName', 'Name', 'Age', 'PregnancyWeek', 'Status', 'RiskFactors', 'Notes'],
-  SCREENING_QUESTIONS: ['id', 'index', 'text_id', 'text_en', 'type', 'safe_answer'],
-  ANALYTICS_LOG: ['Timestamp', 'Type', 'Info']
-};
-
-function doGet(e) {
-  return handleRequest(e);
-}
-
-function doPost(e) {
-  return handleRequest(e);
-}
+function doGet(e) { return handleRequest(e); }
+function doPost(e) { return handleRequest(e); }
 
 function handleRequest(e) {
   const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(10000);
-  } catch (e) {
-    return responseJSON({ status: 'error', message: 'Server busy, please try again.' });
-  }
+  try { lock.waitLock(10000); } catch (e) { return response({ status: 'error', message: 'Server Busy' }); }
 
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let action = e.parameter.action;
     let payload = {};
-    const action = e.parameter ? e.parameter.action : null;
-    
+
+    // Parsing Payload dari React
     if (e.postData && e.postData.contents) {
-      try {
-        payload = JSON.parse(e.postData.contents);
-      } catch (err) {
-        if (!action) return responseJSON({ status: 'error', message: 'Invalid JSON' });
+      const json = JSON.parse(e.postData.contents);
+      if (json.action) action = json.action;
+      payload = json;
+    }
+
+    // =================================================
+    // 1. SISTEM LOCK (Cek Status Buka/Tutup)
+    // =================================================
+    if (action === 'get_system_status') {
+      const sheet = getSheet(ss, 'SYSTEM_CONFIG');
+      const val = sheet.getRange("B2").getValue();
+      const isActive = (val == 1 || String(val) == '1' || String(val).toLowerCase() == 'true');
+      return response({ status: 'success', isActive: isActive });
+    }
+
+    if (action === 'set_system_status') {
+      const sheet = getSheet(ss, 'SYSTEM_CONFIG');
+      const newState = payload.isActive; 
+      const writeValue = (newState === true || newState === 1) ? 1 : 0;
+      sheet.getRange("B2").setValue(writeValue);
+      sheet.getRange("C2").setValue("Updated: " + new Date());
+      SpreadsheetApp.flush();
+      return response({ status: 'success', isActive: writeValue === 1 });
+    }
+
+    // =================================================
+    // 2. INPUT DATA SCREENING (PENTING: Urutan Kolom)
+    // =================================================
+    if (action === 'submit_screening') {
+      const sheet = getSheet(ss, 'SCREENING_RESULTS');
+      const d = payload.data;
+      
+      // Jika sheet kosong, buat header sesuai gambar Anda
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow(['Timestamp', 'Lat', 'Lng', 'LocationName', 'Name', 'Age', 'PregnancyWeek', 'Status', 'Notes']);
       }
+
+      // Normalisasi Status ke Bahasa Inggris (Sesuai Gambar Sheet)
+      let statusEnglish = 'SAFE';
+      const s = (d.status || '').toUpperCase();
+      if (s.includes('MERAH') || s.includes('BAHAYA') || s.includes('DANGER')) statusEnglish = 'DANGER';
+      else if (s.includes('KUNING') || s.includes('WARNING')) statusEnglish = 'WARNING';
+      else statusEnglish = 'SAFE';
+
+      // MEMASUKKAN DATA (URUTAN HARUS SESUAI GAMBAR)
+      // A: Timestamp, B: Lat, C: Lng, D: LocName, E: Name, F: Age, G: Week, H: Status, I: Notes
+      sheet.appendRow([
+        new Date(),       // A
+        d.lat || 0,       // B
+        d.lng || 0,       // C
+        d.locationName || 'Unknown', // D
+        d.name,           // E
+        d.age,            // F
+        d.pregnancyWeeks, // G
+        statusEnglish,    // H
+        d.riskFactors || '' // I (Notes berisi faktor risiko)
+      ]);
+      
+      return response({ status: 'success', message: 'Data saved' });
+    }
+
+    // =================================================
+    // 3. GET DATA (Untuk Dashboard Admin)
+    // =================================================
+    if (action === 'get_data') {
+      const sheet = getSheet(ss, 'SCREENING_RESULTS');
+      const data = sheet.getDataRange().getValues();
+      const rows = data.slice(1); // Skip header
+      
+      const formatted = rows.map(r => {
+        return {
+           Timestamp: r[0], 
+           Lat: r[1],       
+           Lng: r[2],       
+           LocationName: r[3],
+           Name: r[4],      
+           Age: r[5],       
+           PregnancyWeek: r[6],
+           Status: r[7],    
+           Notes: r[8] || '' 
+        };
+      });
+      
+      // Ambil juga pertanyaan
+      const qSheet = getSheet(ss, 'SCREENING_QUESTIONS');
+      const qData = qSheet.getDataRange().getValues().slice(1);
+      const questions = qData.map(q => ({
+        id: q[0], index: q[1], text_id: q[2], text_en: q[3], type: q[4], safe_answer: q[5]
+      }));
+
+      return response({ screening: formatted, questions: questions });
     }
     
-    const finalAction = payload.action || action;
-
-    // --- ACTION: SUBMIT SCREENING (Dari Guest App) ---
-    if (finalAction === 'submit_screening') {
-      const sheet = getOrCreateSheet(ss, 'SCREENING_RESULTS');
-      const data = payload.data;
-      
-      const newRow = [
-        new Date(),                 // Timestamp
-        data.lat || '',             // Lat
-        data.lng || '',             // Lng
-        data.locationName || '',    // LocationName
-        data.name,                  // Name
-        data.age,                   // Age
-        data.pregnancyWeeks,        // Weeks
-        data.status,                // Status (Zona)
-        data.riskFactors,           // Risk Factors
-        data.notes                  // Notes
-      ];
-
-      sheet.appendRow(newRow);
-      return responseJSON({ status: 'success', message: 'Data Recorded', row: sheet.getLastRow() });
+    // Update Data Pertanyaan (CMS)
+    if (action === 'update_sheet_data') {
+       const sheetName = payload.sheetName;
+       const dataRaw = payload.data; // Array of objects
+       const sheet = getSheet(ss, sheetName);
+       
+       // Clear old data except header
+       if (sheet.getLastRow() > 1) {
+         sheet.getRange(2, 1, sheet.getLastRow()-1, sheet.getLastColumn()).clearContent();
+       }
+       
+       if (dataRaw && dataRaw.length > 0) {
+         // Convert objects back to array rows based on simple mapping
+         // Assumes Q Structure: id, index, text_id, text_en, type, safe_answer
+         const rows = dataRaw.map(x => [x.id, x.index, x.text_id, x.text_en, x.type, x.safe_answer]);
+         sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+       }
+       return response({ status: 'success' });
     }
 
-    // --- ACTION: GET DATA (Untuk Admin Dashboard) ---
-    if (finalAction === 'get_data') {
-      const data = getAllData(ss);
-      return responseJSON(data);
-    }
-
-    // --- ACTION: UPDATE DATA (Untuk Logic Manager) ---
-    if (finalAction === 'update_data') {
-      const sheetName = payload.sheetName;
-      const newData = payload.data;
-
-      if (!SHEET_CONFIG[sheetName]) {
-        return responseJSON({ status: 'error', message: 'Sheet not found' });
-      }
-
-      const sheet = getOrCreateSheet(ss, sheetName);
-      
-      // Clear old data (keep header)
-      const lastRow = sheet.getLastRow();
-      if (lastRow > 1) {
-        sheet.getRange(2, 1, lastRow - 1, sheet.getMaxColumns()).clearContent();
-      }
-
-      // Write new data
-      if (newData && newData.length > 0) {
-        const headers = SHEET_CONFIG[sheetName];
-        const rows = newData.map(item => {
-          return headers.map(header => {
-            const val = item[header];
-            if (header === 'id') return "'" + (val || ""); // Force string for IDs
-            return val === undefined || val === null ? "" : val;
-          });
-        });
-        
-        if (rows.length > 0) {
-          sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
-        }
-      }
-
-      return responseJSON({ status: 'success', message: 'Data saved', count: newData ? newData.length : 0 });
-    }
-
-    return responseJSON({ status: 'error', message: 'Unknown Action: ' + finalAction });
+    return response({ status: 'error', message: 'Action unknown' });
 
   } catch (err) {
-    return responseJSON({ status: 'error', message: err.toString() });
+    return response({ status: 'error', message: err.toString() });
   } finally {
     lock.releaseLock();
   }
 }
 
-function getAllData(ss) {
-  return {
-    screening: getSheetData(ss, 'SCREENING_RESULTS'),
-    questions: getSheetData(ss, 'SCREENING_QUESTIONS'),
-    analytics: { totalViews: 0 }
-  };
-}
-
-function getSheetData(ss, sheetName) {
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  
-  const raw = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
-  const headers = raw[0];
-  const rows = raw.slice(1);
-  
-  return rows.map(row => {
-    let obj = {};
-    headers.forEach((h, i) => obj[String(h).trim()] = row[i]);
-    return obj;
-  });
-}
-
-function getOrCreateSheet(ss, name) {
+function getSheet(ss, name) {
   let sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    sheet.appendRow(SHEET_CONFIG[name]); // Set Header Otomatis
-  }
+  if (!sheet) sheet = ss.insertSheet(name);
   return sheet;
 }
 
-function responseJSON(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+function response(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }

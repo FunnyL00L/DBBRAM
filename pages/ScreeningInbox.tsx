@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { ScreeningResult } from '../types';
-import { Search, Download, CheckCircle, AlertTriangle, AlertOctagon, Eye, X, Activity, MapPin, Calendar, User } from 'lucide-react';
+import { Search, CheckCircle, AlertTriangle, AlertOctagon, Eye, X, Activity, MapPin, User, Globe } from 'lucide-react';
 
 interface ScreeningInboxProps {
   data: ScreeningResult[];
@@ -34,9 +34,10 @@ const ScreeningDetailModal = ({ data, onClose }: { data: ScreeningResult, onClos
         }`}>
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-               {data.name}
+               {data.locationName || data.name}
             </h2>
-            <div className="flex flex-wrap gap-2 mt-2">
+            <div className="text-xs text-white/70 mt-1">{data.name} ({data.age} Th)</div>
+            <div className="flex flex-wrap gap-2 mt-3">
                {isDanger && <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded">TIDAK REKOMENDASI</span>}
                {isWarning && <span className="px-2 py-0.5 bg-amber-500 text-black text-[10px] font-bold rounded">PENGAWASAN</span>}
                {isSafe && <span className="px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded">AMAN</span>}
@@ -117,8 +118,13 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
     if (filter === 'KUNING') matchesFilter = status === 'ZONA KUNING';
     if (filter === 'MERAH') matchesFilter = status === 'ZONA MERAH' || status === 'BAHAYA';
 
-    const itemName = item.name || '';
-    const matchesSearch = itemName.toLowerCase().includes(search.toLowerCase());
+    const searchTerm = search.toLowerCase();
+    const itemName = (item.name || '').toLowerCase();
+    const itemLoc = (item.locationName || '').toLowerCase();
+    
+    // Search by Name or Location Name
+    const matchesSearch = itemName.includes(searchTerm) || itemLoc.includes(searchTerm);
+    
     return matchesFilter && matchesSearch;
   });
 
@@ -153,7 +159,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
             <input 
               type="text" 
-              placeholder="Cari nama..." 
+              placeholder="Cari lokasi atau nama..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-black/20 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
@@ -178,7 +184,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
       {/* CONTENT: MOBILE CARDS & DESKTOP TABLE */}
       <div className="flex-1 overflow-y-auto min-h-0">
         
-        {/* MOBILE VIEW (CARDS) - HIDDEN ON DESKTOP */}
+        {/* MOBILE VIEW (CARDS) - Location Name Prioritized */}
         <div className="md:hidden space-y-3 pb-20">
            {filteredData.map((row, idx) => (
              <div 
@@ -192,29 +198,28 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                 }`}/>
                 
                 <div className="flex justify-between items-start mb-2 pl-2">
-                   <div>
-                      <h3 className="font-bold text-white text-base leading-none mb-1">{row.name}</h3>
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                         <span className="flex items-center gap-1"><User size={10}/> {row.age}th</span>
+                   <div className="flex-1 mr-2">
+                      {/* LOCATION NAME AS PRIMARY TITLE */}
+                      <h3 className="font-bold text-white text-base leading-snug mb-1">
+                         {row.locationName || 'Lokasi Terdeteksi'}
+                      </h3>
+                      {/* Guest Name & Age as Subtitle */}
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                         <span className="text-cyan-200 font-medium">{row.name}</span>
                          <span className="w-1 h-1 bg-gray-600 rounded-full"></span>
-                         <span className={row.pregnancyWeeks < 14 || row.pregnancyWeeks > 26 ? 'text-red-400 font-bold' : 'text-cyan-400'}>
-                            Hamil {row.pregnancyWeeks} Mg
-                         </span>
+                         <span className="flex items-center gap-1"><User size={10}/> {row.age}th</span>
+                      </div>
+                      <div className={`text-[10px] mt-1 font-bold ${row.pregnancyWeeks < 14 || row.pregnancyWeeks > 26 ? 'text-red-400' : 'text-emerald-400'}`}>
+                         Kehamilan: {row.pregnancyWeeks} Minggu
                       </div>
                    </div>
                    {renderBadge(row.status)}
                 </div>
 
                 <div className="flex justify-between items-end pl-2 mt-3 pt-3 border-t border-white/5">
-                   <div className="flex flex-col gap-0.5">
-                      <span className="text-[9px] text-gray-600 font-bold uppercase">Lokasi Terpantau</span>
-                      {row.lat ? (
-                        <div className="flex items-center gap-1 text-xs text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 w-fit">
-                           <MapPin size={10}/> {row.lat.toFixed(4)}, {row.lng?.toFixed(4)}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-gray-600 italic">No GPS Data</span>
-                      )}
+                   <div className="flex items-center gap-1 text-[10px] text-blue-300/70 font-mono">
+                      <Globe size={10} />
+                      {row.lat ? `${row.lat.toFixed(4)}, ${row.lng?.toFixed(4)}` : 'No GPS'}
                    </div>
                    <span className="text-[10px] text-gray-600">
                       {new Date(row.timestamp).toLocaleDateString()}
@@ -223,18 +228,18 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
              </div>
            ))}
            {filteredData.length === 0 && (
-             <div className="text-center text-gray-500 py-10 text-sm">Tidak ada data.</div>
+             <div className="text-center text-gray-500 py-10 text-sm">Tidak ada data ditemukan.</div>
            )}
         </div>
 
-        {/* DESKTOP VIEW (TABLE) - HIDDEN ON MOBILE */}
+        {/* DESKTOP VIEW (TABLE) */}
         <div className="hidden md:block">
            <GlassCard noPadding>
               <table className="w-full text-left border-collapse">
                  <thead className="bg-white/5 text-gray-400 text-xs sticky top-0 backdrop-blur-md z-10">
                     <tr>
-                       <th className="p-4 w-32">Lokasi (GPS)</th>
-                       <th className="p-4">Nama Tamu</th>
+                       <th className="p-4 w-28">GPS</th>
+                       <th className="p-4">Lokasi & Tamu</th>
                        <th className="p-4">Usia Hamil</th>
                        <th className="p-4">Status</th>
                        <th className="p-4">Tanggal</th>
@@ -244,17 +249,23 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                  <tbody className="divide-y divide-white/5 text-sm">
                     {filteredData.map((row, idx) => (
                        <tr key={idx} className="hover:bg-white/5 transition-colors group">
-                          <td className="p-4 text-xs font-mono text-gray-400">
+                          <td className="p-4 text-xs font-mono text-gray-500">
                              {row.lat ? (
-                                <div className="flex flex-col text-cyan-300">
+                                <div className="flex flex-col">
                                    <span>{row.lat.toFixed(4)}</span>
-                                   <span className="text-gray-500">{row.lng?.toFixed(4)}</span>
+                                   <span>{row.lng?.toFixed(4)}</span>
                                 </div>
                              ) : '-'}
                           </td>
-                          <td className="p-4 font-semibold text-white">
-                             {row.name}
-                             <div className="text-xs text-gray-500">{row.age} Tahun</div>
+                          <td className="p-4">
+                             {/* LOCATION NAME AS PRIMARY */}
+                             <div className="font-bold text-white text-base mb-0.5">
+                                {row.locationName || 'Lokasi Terdeteksi'}
+                             </div>
+                             {/* GUEST NAME AS SECONDARY */}
+                             <div className="text-xs text-gray-400 flex items-center gap-2">
+                                <User size={12}/> {row.name} ({row.age} Th)
+                             </div>
                           </td>
                           <td className="p-4 text-cyan-200">{row.pregnancyWeeks} Minggu</td>
                           <td className="p-4">{renderBadge(row.status)}</td>

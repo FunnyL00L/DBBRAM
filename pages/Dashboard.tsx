@@ -3,8 +3,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { ScreeningResult } from '../types';
 import { 
-  AlertTriangle, ShieldCheck, AlertOctagon, RefreshCw, Baby, 
-  CalendarClock, MapPin, Maximize2, Minimize2, RotateCw 
+  AlertTriangle, ShieldCheck, AlertOctagon, Baby, 
+  CalendarClock, MapPin, Maximize2, Minimize2, RotateCw
 } from 'lucide-react';
 import { ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { MapContainer, TileLayer, CircleMarker, Popup, Circle, useMap } from 'react-leaflet';
@@ -31,7 +31,6 @@ const MyLocationMarker = () => {
 
   useEffect(() => {
     map.locate().on("locationfound", function (e) {
-      // Pastikan lokasi masih di area Bali
       if (e.latlng.lat > -8.95 && e.latlng.lat < -7.90 && e.latlng.lng > 114.3 && e.latlng.lng < 115.8) {
         setPosition(e.latlng);
       }
@@ -53,10 +52,7 @@ const MyLocationMarker = () => {
 
 export const Dashboard: React.FC<DashboardProps> = ({ data, analyticsCount = 0 }) => {
   const [liveCount, setLiveCount] = useState(analyticsCount);
-  const [isLive, setIsLive] = useState(true);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
-  
-  // State untuk Mobile Expandable Cards
   const [activeStatIndex, setActiveStatIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -105,7 +101,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, analyticsCount = 0 }
       clusters[key].count += 1;
       clusters[key].items.push(item);
 
-      // Scoring Bahaya
       if (item.status === 'ZONA MERAH' || item.status === 'BAHAYA') clusters[key].riskScore += 5;
       else if (item.status === 'ZONA KUNING') clusters[key].riskScore += 2;
       else clusters[key].riskScore += 1;
@@ -144,30 +139,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, analyticsCount = 0 }
   return (
     <div className="p-4 md:p-6 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
       
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* HEADER & CONTROL PANEL */}
+      <div className="flex flex-col md:flex-row justify-between items-start gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white">Dashboard</h1>
           <p className="text-gray-400 text-xs md:text-sm">Real-time Data dari Google Sheets</p>
         </div>
-        
-        {/* TRAFFIC MONITOR */}
-        <div className="flex items-center gap-2 self-end md:self-auto">
-          <div className={`flex items-center gap-3 px-3 py-1.5 rounded-lg border transition-all duration-300 ${isLive ? 'bg-cyan-900/40 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'bg-white/5 border-white/10'}`}>
-            <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`} />
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300 block leading-none">Live Hits</span>
-              <span className="text-lg font-bold text-white leading-none">{liveCount.toLocaleString()}</span>
-            </div>
-          </div>
-          
-          <button onClick={() => setIsLive(!isLive)} className="p-2.5 rounded-lg bg-white/5 hover:bg-white/10 transition text-white border border-white/10">
-            <RefreshCw size={18} className={isLive ? "animate-spin-slow" : ""} />
-          </button>
-        </div>
       </div>
 
-      {/* --- STATS SECTION (MOBILE ACCORDION) --- */}
+      {/* --- STATS SECTION --- */}
       <div className="flex gap-3 h-20 md:grid md:grid-cols-4 md:h-auto md:gap-4 overflow-hidden">
         {statCards.map((stat, idx) => {
           const isActive = activeStatIndex === idx;
