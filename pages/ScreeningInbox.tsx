@@ -1,14 +1,14 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { ScreeningResult } from '../types';
-import { Search, CheckCircle, AlertTriangle, AlertOctagon, Eye, X, Activity, MapPin, User, Globe } from 'lucide-react';
+import { Search, CheckCircle, AlertTriangle, AlertOctagon, Eye, X, Activity, MapPin, User, Globe, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 
 interface ScreeningInboxProps {
   data: ScreeningResult[];
 }
 
-// --- DETAIL MODAL COMPONENT (Reused) ---
+// --- DETAIL MODAL COMPONENT ---
 const ScreeningDetailModal = ({ data, onClose }: { data: ScreeningResult, onClose: () => void }) => {
   if (!data) return null;
 
@@ -41,11 +41,6 @@ const ScreeningDetailModal = ({ data, onClose }: { data: ScreeningResult, onClos
                {isDanger && <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded">TIDAK REKOMENDASI</span>}
                {isWarning && <span className="px-2 py-0.5 bg-amber-500 text-black text-[10px] font-bold rounded">PENGAWASAN</span>}
                {isSafe && <span className="px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-bold rounded">AMAN</span>}
-               {data.lat && (
-                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold rounded flex items-center gap-1">
-                    <MapPin size={10}/> {data.lat.toFixed(4)}, {data.lng?.toFixed(4)}
-                 </span>
-               )}
             </div>
           </div>
           <button onClick={onClose} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition"><X size={18} className="text-white"/></button>
@@ -110,23 +105,65 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
   const [filter, setFilter] = useState<'ALL' | 'HIJAU' | 'KUNING' | 'MERAH'>('ALL');
   const [search, setSearch] = useState('');
   const [selectedItem, setSelectedItem] = useState<ScreeningResult | null>(null);
+  
+  // PAGINATION
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  const filteredData = data.filter(item => {
-    const status = item.status;
-    let matchesFilter = true;
-    if (filter === 'HIJAU') matchesFilter = status === 'ZONA HIJAU' || status === 'AMAN';
-    if (filter === 'KUNING') matchesFilter = status === 'ZONA KUNING';
-    if (filter === 'MERAH') matchesFilter = status === 'ZONA MERAH' || status === 'BAHAYA';
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-    const searchTerm = search.toLowerCase();
-    const itemName = (item.name || '').toLowerCase();
-    const itemLoc = (item.locationName || '').toLowerCase();
-    
-    // Search by Name or Location Name
-    const matchesSearch = itemName.includes(searchTerm) || itemLoc.includes(searchTerm);
-    
-    return matchesFilter && matchesSearch;
-  });
+  // KONFIGURASI JUMLAH BARIS: Mobile 3, Desktop 6
+  const itemsPerPage = isMobile ? 3 : 6;
+
+  const filteredData = useMemo(() => {
+    return data.filter(item => {
+        const status = item.status;
+        let matchesFilter = true;
+        if (filter === 'HIJAU') matchesFilter = status === 'ZONA HIJAU' || status === 'AMAN';
+        if (filter === 'KUNING') matchesFilter = status === 'ZONA KUNING';
+        if (filter === 'MERAH') matchesFilter = status === 'ZONA MERAH' || status === 'BAHAYA';
+
+        const searchTerm = search.toLowerCase();
+        const itemName = (item.name || '').toLowerCase();
+        const itemLoc = (item.locationName || '').toLowerCase();
+        return matchesFilter && (itemName.includes(searchTerm) || itemLoc.includes(searchTerm));
+    });
+  }, [data, filter, search]);
+
+  // PAGINATION LOGIC
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const currentData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // EXPORT EXCEL (CSV)
+  const handleExport = () => {
+    const headers = ['Timestamp', 'Nama', 'Usia', 'Minggu Hamil', 'Lokasi', 'Status', 'Faktor Risiko', 'Catatan'];
+    const csvContent = [
+        headers.join(','),
+        ...filteredData.map(r => [
+            `"${r.timestamp}"`,
+            `"${r.name}"`,
+            r.age,
+            r.pregnancyWeeks,
+            `"${r.locationName}"`,
+            r.status,
+            `"${r.riskFactors?.replace(/"/g, '""') || ''}"`,
+            `"${r.notes?.replace(/"/g, '""') || ''}"`
+        ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `LovinaMom_Data_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const renderBadge = (status: string) => {
     const isGreen = status === 'ZONA HIJAU' || status === 'AMAN';
@@ -150,8 +187,16 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
       {/* HEADER & FILTER */}
       <div className="flex flex-col gap-4 mb-4">
         <div className="flex justify-between items-center">
-          <h1 className="text-xl md:text-3xl font-bold text-white">Inbox Data</h1>
-          <div className="text-xs text-gray-500">{filteredData.length} Tamu</div>
+          <div>
+              <h1 className="text-xl md:text-3xl font-bold text-white">Inbox Data</h1>
+              <div className="text-xs text-gray-500 mt-1">Total: {filteredData.length} Tamu</div>
+          </div>
+          <button 
+             onClick={handleExport}
+             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-2 text-xs font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+          >
+             <Download size={16}/> <span className="hidden md:inline">Export Excel</span>
+          </button>
         </div>
         
         <GlassCard noPadding className="flex flex-col md:flex-row gap-2 p-3">
@@ -161,7 +206,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
               type="text" 
               placeholder="Cari lokasi atau nama..." 
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               className="w-full bg-black/20 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
             />
           </div>
@@ -169,7 +214,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
             {(['ALL', 'HIJAU', 'KUNING', 'MERAH'] as const).map(f => (
               <button
                 key={f}
-                onClick={() => setFilter(f)}
+                onClick={() => { setFilter(f); setCurrentPage(1); }}
                 className={`px-3 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors ${
                   filter === f ? 'bg-cyan-600 text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
                 }`}
@@ -184,9 +229,9 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
       {/* CONTENT: MOBILE CARDS & DESKTOP TABLE */}
       <div className="flex-1 overflow-y-auto min-h-0">
         
-        {/* MOBILE VIEW (CARDS) - Location Name Prioritized */}
-        <div className="md:hidden space-y-3 pb-20">
-           {filteredData.map((row, idx) => (
+        {/* MOBILE VIEW (CARDS) */}
+        <div className="md:hidden space-y-3 pb-4">
+           {currentData.map((row, idx) => (
              <div 
                 key={idx} 
                 onClick={() => setSelectedItem(row)}
@@ -199,11 +244,9 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                 
                 <div className="flex justify-between items-start mb-2 pl-2">
                    <div className="flex-1 mr-2">
-                      {/* LOCATION NAME AS PRIMARY TITLE */}
                       <h3 className="font-bold text-white text-base leading-snug mb-1">
                          {row.locationName || 'Lokasi Terdeteksi'}
                       </h3>
-                      {/* Guest Name & Age as Subtitle */}
                       <div className="flex items-center gap-2 text-xs text-gray-400">
                          <span className="text-cyan-200 font-medium">{row.name}</span>
                          <span className="w-1 h-1 bg-gray-600 rounded-full"></span>
@@ -227,7 +270,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                 </div>
              </div>
            ))}
-           {filteredData.length === 0 && (
+           {currentData.length === 0 && (
              <div className="text-center text-gray-500 py-10 text-sm">Tidak ada data ditemukan.</div>
            )}
         </div>
@@ -247,7 +290,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                     </tr>
                  </thead>
                  <tbody className="divide-y divide-white/5 text-sm">
-                    {filteredData.map((row, idx) => (
+                    {currentData.map((row, idx) => (
                        <tr key={idx} className="hover:bg-white/5 transition-colors group">
                           <td className="p-4 text-xs font-mono text-gray-500">
                              {row.lat ? (
@@ -258,11 +301,9 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                              ) : '-'}
                           </td>
                           <td className="p-4">
-                             {/* LOCATION NAME AS PRIMARY */}
                              <div className="font-bold text-white text-base mb-0.5">
                                 {row.locationName || 'Lokasi Terdeteksi'}
                              </div>
-                             {/* GUEST NAME AS SECONDARY */}
                              <div className="text-xs text-gray-400 flex items-center gap-2">
                                 <User size={12}/> {row.name} ({row.age} Th)
                              </div>
@@ -282,6 +323,42 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
            </GlassCard>
         </div>
       </div>
+
+      {/* PAGINATION CONTROLS */}
+      {totalPages > 1 && (
+         <div className="flex justify-center items-center gap-4 mt-4 py-2">
+            <button 
+               onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+               disabled={currentPage === 1}
+               className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent text-white transition"
+            >
+               <ChevronLeft size={20} />
+            </button>
+            <div className="flex gap-2">
+               {Array.from({ length: totalPages }).map((_, i) => (
+                  <button
+                     key={i}
+                     onClick={() => setCurrentPage(i + 1)}
+                     className={`w-8 h-8 rounded-lg text-xs font-bold transition ${
+                        currentPage === i + 1 
+                        ? 'bg-cyan-600 text-white' 
+                        : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                     }`}
+                  >
+                     {i + 1}
+                  </button>
+               ))}
+            </div>
+            <button 
+               onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+               disabled={currentPage === totalPages}
+               className="p-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent text-white transition"
+            >
+               <ChevronRight size={20} />
+            </button>
+         </div>
+      )}
+
     </div>
   );
 };

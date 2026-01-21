@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, FileText, Database, LogOut, Wifi, WifiOff, AlertTriangle, CheckCircle2, X, ExternalLink, Lock, Unlock, Power } from 'lucide-react';
+import { LayoutDashboard, FileText, Database, LogOut, Wifi, WifiOff, AlertTriangle, CheckCircle2, X, ExternalLink, Lock, Unlock, Power, Activity } from 'lucide-react';
 
 interface SidebarProps {
   activeTab: string;
@@ -25,6 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'screening', label: 'Screening Inbox', icon: FileText },
+    { id: 'traffic', label: 'Info Trafik', icon: Activity },
     { id: 'cms', label: 'Content Manager', icon: Database },
   ];
 

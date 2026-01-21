@@ -22,9 +22,17 @@ export interface ScreeningQuestion {
   safe_answer: 'YES' | 'NO';
 }
 
+export interface TrafficLog {
+  timestamp: string;
+  lat: number;
+  lng: number;
+  userAgent?: string; // Info Perangkat
+}
+
 export interface DashboardData {
   screening: ScreeningResult[];
   questions: ScreeningQuestion[];
+  traffic?: TrafficLog[];
   analytics?: {
     totalViews: number;
   };

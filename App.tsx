@@ -6,7 +6,8 @@ import { ScreeningInbox } from './pages/ScreeningInbox';
 import { ContentManager } from './pages/ContentManager';
 import { Login } from './pages/Login';
 import { ScreeningForm } from './pages/ScreeningForm';
-import { fetchData, getSystemStatus, toggleSystemStatus } from './services/api';
+import { TrafficInfo } from './pages/TrafficInfo';
+import { fetchData, getSystemStatus, toggleSystemStatus, logTraffic } from './services/api';
 import { DashboardData } from './types';
 import { TEMPLATE_DATA } from './data/templateData';
 import { Menu, Lock } from 'lucide-react';
@@ -39,6 +40,18 @@ const App: React.FC = () => {
   useEffect(() => {
     const isGuest = new URLSearchParams(window.location.search).get('mode') === 'guest';
     setIsGuestMode(isGuest);
+
+    // --- LOG TRAFFIC SAAT GUEST MODE DIBUKA ---
+    if (isGuest) {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => logTraffic(pos.coords.latitude, pos.coords.longitude),
+          (err) => logTraffic() // Log tanpa koordinat jika ditolak
+        );
+      } else {
+        logTraffic();
+      }
+    }
   }, []);
 
   // --- 2. NETWORK LISTENERS ---
@@ -240,6 +253,7 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-auto relative z-10 p-1">
           {activeTab === 'dashboard' && data && <Dashboard data={data.screening} analyticsCount={data.analytics?.totalViews} />}
           {activeTab === 'screening' && data && <ScreeningInbox data={data.screening} />}
+          {activeTab === 'traffic' && data && <TrafficInfo logs={data.traffic || []} />}
           {activeTab === 'cms' && data && (
             <ContentManager 
               questionsData={data.questions}
