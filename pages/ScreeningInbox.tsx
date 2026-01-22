@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { GlassCard } from '../components/GlassCard';
 import { ScreeningResult } from '../types';
-import { Search, CheckCircle, AlertTriangle, AlertOctagon, Eye, X, Activity, MapPin, User, Globe, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { Search, CheckCircle, AlertTriangle, AlertOctagon, Eye, X, Activity, MapPin, User, Globe, ChevronLeft, ChevronRight, Download, Info } from 'lucide-react';
 
 interface ScreeningInboxProps {
   data: ScreeningResult[];
@@ -13,11 +13,14 @@ const ScreeningDetailModal = ({ data, onClose }: { data: ScreeningResult, onClos
   if (!data) return null;
 
   const reasons: string[] = [];
-  if (data.pregnancyWeeks < 14) reasons.push(`Usia kehamilan **${data.pregnancyWeeks} minggu** (Terlalu Dini).`);
-  else if (data.pregnancyWeeks > 26) reasons.push(`Usia kehamilan **${data.pregnancyWeeks} minggu** (Terlalu Tua).`);
-
-  if (data.riskFactors && data.riskFactors.length > 2 && data.riskFactors !== 'None') {
-    data.riskFactors.split(/,|;/).forEach(r => { if(r.trim()) reasons.push(r.trim()) });
+  
+  // Ambil data faktor risiko dari DB
+  if (data.riskFactors && data.riskFactors.trim() !== '' && data.riskFactors.toLowerCase() !== 'none') {
+    // Split berdasarkan koma atau titik koma
+    const rawFactors = data.riskFactors.split(/[,;]/);
+    rawFactors.forEach(r => {
+      if (r.trim()) reasons.push(r.trim());
+    });
   }
 
   const isSafe = data.status === 'ZONA HIJAU' || data.status === 'AMAN';
@@ -62,34 +65,36 @@ const ScreeningDetailModal = ({ data, onClose }: { data: ScreeningResult, onClos
               </div>
            </div>
 
-           {/* Risk List */}
-           {reasons.length > 0 ? (
-             <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl">
-                <h3 className="text-red-300 text-sm font-bold flex items-center gap-2 mb-2">
-                   <Activity size={16}/> Faktor Risiko:
-                </h3>
-                <ul className="space-y-2">
-                   {reasons.map((r, i) => (
-                     <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
-                        <span className="mt-1 w-1 h-1 bg-red-400 rounded-full flex-shrink-0"></span>
-                        <span dangerouslySetInnerHTML={{ __html: r.replace(/\*\*/g, '') }} />
-                     </li>
-                   ))}
-                </ul>
-             </div>
-           ) : (
-             <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-3">
-                <CheckCircle size={20} className="text-emerald-400" />
-                <span className="text-sm text-emerald-200">Tidak ada masalah kesehatan terdeteksi.</span>
-             </div>
-           )}
+           {/* Risk List (Data dari DB) */}
+           <div className="space-y-2">
+              <h3 className="text-white text-sm font-bold flex items-center gap-2">
+                 <Activity size={16} className="text-cyan-400"/> Faktor Risiko (Database):
+              </h3>
+              {reasons.length > 0 ? (
+                <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl">
+                   <ul className="space-y-2">
+                      {reasons.map((r, i) => (
+                        <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                           <span className="mt-1 w-1 h-1 bg-red-400 rounded-full flex-shrink-0"></span>
+                           <span>{r}</span>
+                        </li>
+                      ))}
+                   </ul>
+                </div>
+              ) : (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-3">
+                   <CheckCircle size={20} className="text-emerald-400" />
+                   <span className="text-sm text-emerald-200">Tidak ada faktor risiko spesifik yang tercatat.</span>
+                </div>
+              )}
+           </div>
 
            {/* Notes */}
            {data.notes && (
              <div className="pt-2">
-                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Notes</div>
-                <div className="bg-black/30 p-2 rounded text-xs text-gray-500 font-mono break-all">
-                   {data.notes}
+                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Catatan Tambahan</div>
+                <div className="bg-black/30 p-3 rounded-xl text-xs text-gray-400 border border-white/5 italic">
+                   "{data.notes}"
                 </div>
              </div>
            )}
@@ -116,8 +121,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // KONFIGURASI JUMLAH BARIS: Mobile 3, Desktop 6
-  const itemsPerPage = isMobile ? 3 : 6;
+  const itemsPerPage = isMobile ? 5 : 10;
 
   const filteredData = useMemo(() => {
     return data.filter(item => {
@@ -130,15 +134,14 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
         const searchTerm = search.toLowerCase();
         const itemName = (item.name || '').toLowerCase();
         const itemLoc = (item.locationName || '').toLowerCase();
-        return matchesFilter && (itemName.includes(searchTerm) || itemLoc.includes(searchTerm));
+        const itemRisk = (item.riskFactors || '').toLowerCase();
+        return matchesFilter && (itemName.includes(searchTerm) || itemLoc.includes(searchTerm) || itemRisk.includes(searchTerm));
     });
   }, [data, filter, search]);
 
-  // PAGINATION LOGIC
   const totalPages = Math.ceil(filteredData.length / itemsPerPage);
   const currentData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // EXPORT EXCEL (CSV)
   const handleExport = () => {
     const headers = ['Timestamp', 'Nama', 'Usia', 'Minggu Hamil', 'Lokasi', 'Status', 'Faktor Risiko', 'Catatan'];
     const csvContent = [
@@ -189,7 +192,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
         <div className="flex justify-between items-center">
           <div>
               <h1 className="text-xl md:text-3xl font-bold text-white">Inbox Data</h1>
-              <div className="text-xs text-gray-500 mt-1">Total: {filteredData.length} Tamu</div>
+              <div className="text-xs text-gray-500 mt-1">Total: {filteredData.length} Tamu Terdaftar</div>
           </div>
           <button 
              onClick={handleExport}
@@ -204,7 +207,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
             <input 
               type="text" 
-              placeholder="Cari lokasi atau nama..." 
+              placeholder="Cari lokasi, nama, atau risiko..." 
               value={search}
               onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
               className="w-full bg-black/20 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
@@ -238,7 +241,7 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                 className="bg-[#111827] border border-white/5 rounded-xl p-4 active:scale-[0.98] transition-transform shadow-lg relative overflow-hidden"
              >
                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                  row.status === 'ZONA MERAH' ? 'bg-red-500' : 
+                  (row.status === 'ZONA MERAH' || row.status === 'BAHAYA') ? 'bg-red-500' : 
                   row.status === 'ZONA KUNING' ? 'bg-amber-500' : 'bg-emerald-500'
                 }`}/>
                 
@@ -252,9 +255,11 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                          <span className="w-1 h-1 bg-gray-600 rounded-full"></span>
                          <span className="flex items-center gap-1"><User size={10}/> {row.age}th</span>
                       </div>
-                      <div className={`text-[10px] mt-1 font-bold ${row.pregnancyWeeks < 14 || row.pregnancyWeeks > 26 ? 'text-red-400' : 'text-emerald-400'}`}>
-                         Kehamilan: {row.pregnancyWeeks} Minggu
-                      </div>
+                      {row.riskFactors && row.riskFactors.toLowerCase() !== 'none' && (
+                        <div className="text-[9px] mt-2 flex items-center gap-1 text-red-400 font-bold bg-red-500/10 px-2 py-0.5 rounded-full w-fit">
+                           <Activity size={10}/> Risiko Terdeteksi
+                        </div>
+                      )}
                    </div>
                    {renderBadge(row.status)}
                 </div>
@@ -281,9 +286,9 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
               <table className="w-full text-left border-collapse">
                  <thead className="bg-white/5 text-gray-400 text-xs sticky top-0 backdrop-blur-md z-10">
                     <tr>
-                       <th className="p-4 w-28">GPS</th>
                        <th className="p-4">Lokasi & Tamu</th>
                        <th className="p-4">Usia Hamil</th>
+                       <th className="p-4">Faktor Risiko</th>
                        <th className="p-4">Status</th>
                        <th className="p-4">Tanggal</th>
                        <th className="p-4 text-center">Aksi</th>
@@ -292,14 +297,6 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                  <tbody className="divide-y divide-white/5 text-sm">
                     {currentData.map((row, idx) => (
                        <tr key={idx} className="hover:bg-white/5 transition-colors group">
-                          <td className="p-4 text-xs font-mono text-gray-500">
-                             {row.lat ? (
-                                <div className="flex flex-col">
-                                   <span>{row.lat.toFixed(4)}</span>
-                                   <span>{row.lng?.toFixed(4)}</span>
-                                </div>
-                             ) : '-'}
-                          </td>
                           <td className="p-4">
                              <div className="font-bold text-white text-base mb-0.5">
                                 {row.locationName || 'Lokasi Terdeteksi'}
@@ -308,11 +305,16 @@ export const ScreeningInbox: React.FC<ScreeningInboxProps> = ({ data }) => {
                                 <User size={12}/> {row.name} ({row.age} Th)
                              </div>
                           </td>
-                          <td className="p-4 text-cyan-200">{row.pregnancyWeeks} Minggu</td>
+                          <td className="p-4 text-cyan-200 font-bold">{row.pregnancyWeeks} Minggu</td>
+                          <td className="p-4">
+                             <div className="max-w-[200px] truncate text-xs text-gray-400 italic">
+                                {row.riskFactors || 'Tidak Ada'}
+                             </div>
+                          </td>
                           <td className="p-4">{renderBadge(row.status)}</td>
                           <td className="p-4 text-gray-400 text-xs">{new Date(row.timestamp).toLocaleDateString()}</td>
                           <td className="p-4 text-center">
-                             <button onClick={() => setSelectedItem(row)} className="p-2 rounded bg-white/5 hover:bg-cyan-500 hover:text-white transition">
+                             <button onClick={() => setSelectedItem(row)} className="p-2 rounded bg-white/5 hover:bg-cyan-500 hover:text-white transition shadow-sm">
                                 <Eye size={16}/>
                              </button>
                           </td>

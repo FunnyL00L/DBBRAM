@@ -87,7 +87,7 @@ export const fetchData = async (): Promise<DashboardData | null> => {
       age: parseInt(item.Age || 0),
       pregnancyWeeks: parseInt(item.PregnancyWeek || 0),
       status: normalizeStatus(item.Status), 
-      riskFactors: '',
+      riskFactors: item.RiskFactors || '', // AMBIL DATA DARI DB
       notes: item.Notes || '',
       lat: parseFloat(item.Lat || 0),
       lng: parseFloat(item.Lng || 0),
